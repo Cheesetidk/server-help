@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>CRAZY ROX AND CHEEESET P2P THING AHHHH</title>
+  <title>BeamP2P</title>
   
   <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
@@ -29,13 +29,31 @@
   <!-- Font Awesome Icons -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
   
-  <!-- PeerJS CDN -->
+  <!-- PeerJS CDN with Fallback Script -->
   <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+  <script>
+    if (typeof Peer === 'undefined') {
+      document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.4/peerjs.min.js"><\/script>');
+    }
+  </script>
   
   <!-- QRCode.js CDN -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 
   <style>
+    /* CSS Variables for Dynamic Custom Themes */
+    :root {
+      --bg-color: #020617;
+      --self-bubble-bg: #4f46e5;
+      --self-bubble-text: #ffffff;
+      --peer-bubble-bg: #1e293b;
+      --peer-bubble-text: #f8fafc;
+    }
+
+    body {
+      background-color: var(--bg-color);
+    }
+
     /* Custom Scrollbar */
     ::-webkit-scrollbar {
       width: 6px;
@@ -52,37 +70,78 @@
       background: rgba(71, 85, 105, 1);
     }
 
-    /* Pulse animations */
-    @keyframes pulse-dot {
-      0%, 100% { transform: scale(1); opacity: 1; }
-      50% { transform: scale(1.25); opacity: 0.7; }
+    /* Animated Rainbow Host Text */
+    @keyframes rainbow-anim {
+      0% { background-position: 0% 50%; }
+      50% { background-position: 100% 50%; }
+      100% { background-position: 0% 50%; }
     }
-    .animate-pulse-dot {
-      animation: pulse-dot 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    .rainbow-text {
+      background: linear-gradient(90deg, #ff4545, #ffa845, #ffd845, #52ff45, #45ffd8, #4582ff, #a845ff, #ff45d8, #ff4545);
+      background-size: 300% 300%;
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      animation: rainbow-anim 4s ease infinite;
+      font-weight: 800;
     }
 
-    /* Voice Call Visualizer Equalizer Animation */
+    /* iPhone Glassmorphism Bubble Effect */
+    .glass-bubbles .chat-bubble-self {
+      background: rgba(99, 102, 241, 0.28) !important;
+      backdrop-filter: blur(16px) saturate(180%) !important;
+      -webkit-backdrop-filter: blur(16px) saturate(180%) !important;
+      border: 1px solid rgba(255, 255, 255, 0.25) !important;
+      box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.3) !important;
+      color: #ffffff !important;
+    }
+    .glass-bubbles .chat-bubble-peer {
+      background: rgba(255, 255, 255, 0.12) !important;
+      backdrop-filter: blur(16px) saturate(180%) !important;
+      -webkit-backdrop-filter: blur(16px) saturate(180%) !important;
+      border: 1px solid rgba(255, 255, 255, 0.18) !important;
+      box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3) !important;
+      color: #f1f5f9 !important;
+    }
+
+    /* Custom Message Bubble Colors */
+    .chat-bubble-self {
+      background-color: var(--self-bubble-bg);
+      color: var(--self-bubble-text);
+    }
+    .chat-bubble-peer {
+      background-color: var(--peer-bubble-bg);
+      color: var(--peer-bubble-text);
+    }
+
+    /* Voice Visualizer Bar */
     .vis-bar {
       transition: height 0.08s ease-in-out;
     }
 
-    #drop-overlay {
-      transition: opacity 0.2s ease-in-out, visibility 0.2s;
-    }
-
+    /* Glass Backdrop Modal */
     .modal-backdrop {
-      backdrop-filter: blur(8px);
+      backdrop-filter: blur(12px);
     }
   </style>
 </head>
 
-<body class="bg-slate-950 text-slate-100 h-full flex flex-col font-sans antialiased overflow-hidden select-none">
+<body class="bg-slate-950 text-slate-100 h-full flex flex-col font-sans antialiased overflow-hidden select-none relative">
+
+  <!-- DYNAMIC BACKGROUND WALLPAPER LAYER -->
+  <div id="bg-wallpaper-container" class="absolute inset-0 pointer-events-none z-0 overflow-hidden">
+    <img id="bg-custom-image" class="w-full h-full object-cover hidden" alt="Background Wallpaper" />
+    <video id="bg-custom-video" class="w-full h-full object-cover hidden" autoplay loop muted playsinline></video>
+    <div id="bg-overlay" class="absolute inset-0 bg-slate-950/60 hidden"></div>
+  </div>
 
   <!-- HIDDEN AUDIO ELEMENT FOR REMOTE VOICE STREAM -->
   <audio id="remote-audio" autoplay class="hidden"></audio>
 
+  <!-- HIDDEN FILE INPUT FOR CUSTOM IMAGE REACTION -->
+  <input type="file" id="custom-reaction-file-input" class="hidden" accept="image/*" onchange="handleCustomReactionUpload(event)" />
+
   <!-- TOP HEADER -->
-  <header class="bg-slate-900/90 border-b border-slate-800 px-4 py-3 flex items-center justify-between shrink-0 z-20 backdrop-blur-md">
+  <header class="bg-slate-900/90 border-b border-slate-800/80 px-4 py-3 flex items-center justify-between shrink-0 z-20 backdrop-blur-md relative">
     <div class="flex items-center space-x-3">
       <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-600 to-violet-500 flex items-center justify-center shadow-lg shadow-indigo-500/20">
         <i class="fa-solid font-bold fa-bolt text-white text-lg"></i>
@@ -90,49 +149,54 @@
       <div>
         <h1 class="font-bold text-slate-100 tracking-tight text-base leading-tight flex items-center gap-2">
           BeamP2P
-          <span class="text-[10px] bg-slate-800 text-slate-400 border border-slate-700 px-1.5 py-0.5 rounded font-mono uppercase">Serverless</span>
+          <span class="text-[10px] bg-slate-800 text-slate-400 border border-slate-700 px-1.5 py-0.5 rounded font-mono uppercase">Multi-Peer</span>
         </h1>
-        <p class="text-xs text-slate-400 hidden sm:block">Encrypted P2P Chat & Voice Call</p>
+        <p class="text-xs text-slate-400 hidden sm:block">Serverless Encrypted WebRTC Hub</p>
       </div>
     </div>
 
-    <!-- Right Controls / Status -->
+    <!-- Right Header Controls -->
     <div class="flex items-center space-x-2 sm:space-x-3">
       
       <!-- Connection Status Badge -->
       <div id="status-badge" class="flex items-center space-x-2 bg-slate-800/80 border border-slate-700/60 px-3 py-1.5 rounded-full text-xs font-medium text-slate-300">
         <span id="status-dot" class="w-2.5 h-2.5 rounded-full bg-slate-500"></span>
-        <span id="status-text">Disconnected</span>
+        <span id="status-text">Lobby</span>
         <button id="retry-conn-btn" onclick="manualReconnect()" class="hidden ml-1 text-[10px] bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 px-1.5 py-0.5 rounded transition-colors" title="Retry Connection">
           <i class="fa-solid fa-rotate-right"></i>
         </button>
       </div>
 
-      <!-- Voice Call Trigger Button (Enabled in Chat) -->
+      <!-- Voice Call Trigger Button -->
       <button id="voice-call-btn" onclick="initiateVoiceCall()" class="hidden bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 border border-emerald-500/30 px-3 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center space-x-1.5">
         <i class="fa-solid fa-phone"></i>
         <span class="hidden sm:inline">Voice Call</span>
       </button>
 
+      <!-- Settings Gear Button -->
+      <button onclick="openSettingsModal()" class="p-2 text-slate-400 hover:text-slate-100 hover:bg-slate-800 rounded-lg transition-colors" title="Theme Settings">
+        <i class="fa-solid fa-gear"></i>
+      </button>
+
       <!-- Sound Toggle Button -->
-      <button id="sound-btn" onclick="toggleSound()" class="p-2 text-slate-400 hover:text-slate-100 hover:bg-slate-800 rounded-lg transition-colors" title="Toggle Sound Notifications">
+      <button id="sound-btn" onclick="toggleSound()" class="p-2 text-slate-400 hover:text-slate-100 hover:bg-slate-800 rounded-lg transition-colors" title="Toggle Audio Notifications">
         <i id="sound-icon" class="fa-solid fa-volume-high"></i>
       </button>
 
-      <!-- Room Info / Share Button -->
+      <!-- Room Share Button -->
       <button id="header-share-btn" onclick="openShareModal()" class="hidden sm:flex items-center space-x-1.5 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-400 border border-indigo-500/30 px-3 py-1.5 rounded-lg text-xs font-medium transition-all">
         <i class="fa-solid fa-qrcode"></i>
-        <span>Room Link</span>
+        <span>Invite</span>
       </button>
 
-      <!-- Leave / New Room Button -->
-      <button id="leave-btn" onclick="confirmLeaveRoom()" class="hidden p-2 text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors" title="Leave Chat">
+      <!-- Leave Room Button -->
+      <button id="leave-btn" onclick="confirmLeaveRoom()" class="hidden p-2 text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors" title="Leave Chat Room">
         <i class="fa-solid fa-right-from-bracket"></i>
       </button>
     </div>
   </header>
 
-  <!-- VOICE CALL TOP BAR (ACTIVE CALL PANEL) -->
+  <!-- ACTIVE VOICE CALL PANEL -->
   <div id="voice-call-bar" class="hidden bg-slate-900 border-b border-indigo-500/30 px-4 py-2.5 flex items-center justify-between z-10 shadow-lg">
     <div class="flex items-center space-x-3">
       <div class="relative flex items-center justify-center w-8 h-8 rounded-full bg-emerald-500/20 text-emerald-400">
@@ -140,17 +204,15 @@
       </div>
       <div>
         <div class="flex items-center space-x-2">
-          <span class="text-xs font-bold text-slate-200">Voice Call Connected</span>
+          <span class="text-xs font-bold text-slate-200">Voice Channel Active</span>
           <span id="call-timer" class="text-xs font-mono text-emerald-400 bg-emerald-950/60 border border-emerald-800/50 px-2 py-0.5 rounded">00:00</span>
         </div>
-        <p id="call-status-subtitle" class="text-[11px] text-slate-400">Audio encrypted P2P channel active</p>
+        <p id="call-status-subtitle" class="text-[11px] text-slate-400">P2P Opus Audio</p>
       </div>
     </div>
 
-    <!-- Audio Equalizer Visualizer & Controls -->
+    <!-- Equalizer Visualizer & Call Actions -->
     <div class="flex items-center space-x-3">
-      
-      <!-- Live Equalizer Bars -->
       <div id="audio-vis-container" class="hidden sm:flex items-end space-x-1 h-5 px-2 py-1 bg-slate-950/60 rounded-md border border-slate-800">
         <div class="vis-bar w-1 bg-emerald-400 rounded-full h-1"></div>
         <div class="vis-bar w-1 bg-emerald-400 rounded-full h-2"></div>
@@ -158,63 +220,71 @@
         <div class="vis-bar w-1 bg-emerald-400 rounded-full h-3"></div>
       </div>
 
-      <!-- Mute Mic Toggle -->
       <button id="mute-mic-btn" onclick="toggleMuteMic()" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-lg text-xs font-semibold flex items-center space-x-1.5 transition-colors">
         <i id="mute-mic-icon" class="fa-solid fa-microphone"></i>
         <span id="mute-mic-text" class="hidden md:inline">Mute</span>
       </button>
 
-      <!-- End Call Button -->
       <button onclick="endVoiceCall(true)" class="px-3 py-1.5 bg-rose-600 hover:bg-rose-500 text-white rounded-lg text-xs font-semibold flex items-center space-x-1.5 shadow-md shadow-rose-600/20 transition-all">
         <i class="fa-solid fa-phone-slash"></i>
-        <span>End Call</span>
+        <span>End</span>
       </button>
     </div>
   </div>
 
-  <!-- MAIN CONTAINER -->
-  <main class="flex-1 relative flex flex-col overflow-hidden">
+  <!-- MAIN VIEWPORT CONTAINER -->
+  <main class="flex-1 relative flex flex-col overflow-hidden z-10">
 
     <!-- LOBBY VIEW -->
     <div id="lobby-view" class="flex-1 flex items-center justify-center p-4 overflow-y-auto">
       <div class="max-w-md w-full space-y-6">
         
         <div class="text-center space-y-2">
-          <div class="inline-flex p-3 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 mb-2">
-            <i class="fa-solid fa-network-wired text-3xl"></i>
+          <div class="inline-flex p-3 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 mb-1">
+            <i class="fa-solid fa-users-rays text-3xl"></i>
           </div>
-          <h2 class="text-2xl font-extrabold text-white tracking-tight sm:text-3xl">Direct WebRTC Chat & Voice</h2>
+          <h2 class="text-2xl font-extrabold text-white tracking-tight sm:text-3xl">Serverless Multi-User Hub</h2>
           <p class="text-slate-400 text-sm">
-            Serverless peer-to-peer messaging, instant file transfers, and voice calls direct between browsers.
+            Direct peer-to-peer chat, live viewport code execution, polls, media streaming & voice calls.
           </p>
         </div>
 
-        <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-5 shadow-2xl">
+        <div class="bg-slate-900/90 border border-slate-800/80 rounded-2xl p-5 space-y-5 shadow-2xl backdrop-blur-md">
           
+          <!-- Custom Username Field -->
           <div>
-            <button onclick="hostRoom()" class="w-full bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white font-semibold py-3 px-4 rounded-xl shadow-lg shadow-indigo-600/25 flex items-center justify-center space-x-2 transition-all transform active:scale-[0.98]">
-              <i class="fa-solid fa-plus-circle text-lg"></i>
-              <span>Host a New Room</span>
+            <label for="username-input" class="block text-xs font-medium text-slate-300 mb-1">Your Custom Username</label>
+            <div class="relative">
+              <input type="text" id="username-input" maxlength="20" placeholder="e.g. Alex" 
+                class="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-xl px-3.5 py-2.5 text-sm text-slate-100 placeholder-slate-600 outline-none transition-all pl-9" />
+              <i class="fa-solid fa-user absolute left-3.5 top-3 text-slate-500 text-xs"></i>
+            </div>
+          </div>
+
+          <div class="pt-2">
+            <button id="host-room-btn" onclick="hostRoom()" class="w-full bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white font-semibold py-3 px-4 rounded-xl shadow-lg shadow-indigo-600/25 flex items-center justify-center space-x-2 transition-all transform active:scale-[0.98]">
+              <i id="host-btn-icon" class="fa-solid fa-plus-circle text-lg"></i>
+              <span id="host-btn-text">Host Multi-User Room</span>
             </button>
-            <p class="text-[11px] text-slate-500 text-center mt-2">Generates a unique link & QR code to share with your peer.</p>
+            <p class="text-[11px] text-slate-500 text-center mt-1.5">Host username receives <span class="rainbow-text">Rainbow Theme</span>.</p>
           </div>
 
           <div class="relative flex py-1 items-center">
             <div class="flex-grow border-t border-slate-800"></div>
-            <span class="flex-shrink mx-3 text-slate-500 text-xs uppercase tracking-wider font-semibold">Or Join Existing</span>
+            <span class="flex-shrink mx-3 text-slate-500 text-xs uppercase tracking-wider font-semibold">Or Join Room</span>
             <div class="flex-grow border-t border-slate-800"></div>
           </div>
 
           <form onsubmit="handleManualJoin(event)" class="space-y-3">
             <div>
-              <label for="room-input" class="block text-xs font-medium text-slate-400 mb-1">Room ID or Share Link</label>
+              <label for="room-input" class="block text-xs font-medium text-slate-400 mb-1">Room ID or Link</label>
               <div class="relative">
                 <input type="text" id="room-input" placeholder="e.g. beam-x9a2k or pasted link" 
                   class="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-xl px-3.5 py-2.5 text-sm text-slate-100 placeholder-slate-600 outline-none transition-all pr-10" />
                 <i class="fa-solid fa-key absolute right-3.5 top-3 text-slate-600 text-xs"></i>
               </div>
             </div>
-            <button type="submit" class="w-full bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold py-2.5 px-4 rounded-xl border border-slate-700/60 flex items-center justify-center space-x-2 transition-all active:scale-[0.98]">
+            <button type="submit" id="join-room-btn" class="w-full bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold py-2.5 px-4 rounded-xl border border-slate-700/60 flex items-center justify-center space-x-2 transition-all active:scale-[0.98]">
               <i class="fa-solid fa-arrow-right-to-bracket text-indigo-400"></i>
               <span>Join Room</span>
             </button>
@@ -222,60 +292,66 @@
 
         </div>
 
-        <div class="grid grid-cols-3 gap-2 text-center text-[11px] text-slate-500">
-          <div class="bg-slate-900/50 border border-slate-800/80 p-2 rounded-lg">
-            <i class="fa-solid fa-shield-halved text-indigo-400 block text-sm mb-1"></i>
-            <span>P2P Encrypted</span>
-          </div>
-          <div class="bg-slate-900/50 border border-slate-800/80 p-2 rounded-lg">
-            <i class="fa-solid fa-heartbeat text-indigo-400 block text-sm mb-1"></i>
-            <span>Auto Heartbeat</span>
-          </div>
-          <div class="bg-slate-900/50 border border-slate-800/80 p-2 rounded-lg">
-            <i class="fa-solid fa-microphone text-indigo-400 block text-sm mb-1"></i>
-            <span>HD Voice Call</span>
-          </div>
-        </div>
-
       </div>
     </div>
 
-    <!-- CHAT VIEW -->
+    <!-- CHAT & CONTENT VIEW -->
     <div id="chat-view" class="hidden flex-1 flex flex-col h-full relative">
       
-      <!-- Chat Banner / Peer Bar -->
-      <div class="bg-slate-900/60 border-b border-slate-800/80 px-4 py-2 flex items-center justify-between text-xs shrink-0">
-        <div class="flex items-center space-x-2 truncate">
-          <span class="text-slate-400">Room:</span>
-          <span id="chat-room-id-display" class="font-mono font-bold text-indigo-400 bg-indigo-950/60 border border-indigo-800/40 px-2 py-0.5 rounded select-all">---</span>
+      <!-- Room Info Banner -->
+      <div class="bg-slate-900/80 border-b border-slate-800/80 px-4 py-2 flex items-center justify-between text-xs shrink-0 backdrop-blur-md">
+        <div class="flex items-center space-x-3 truncate">
+          <div class="flex items-center space-x-1.5">
+            <span class="text-slate-400">Room:</span>
+            <span id="chat-room-id-display" class="font-mono font-bold text-indigo-400 bg-indigo-950/60 border border-indigo-800/40 px-2 py-0.5 rounded select-all">---</span>
+          </div>
+          <div class="flex items-center space-x-1 bg-slate-800/80 px-2 py-0.5 rounded text-slate-300">
+            <i class="fa-solid fa-users text-[10px] text-indigo-400"></i>
+            <span id="online-count">1 Online</span>
+          </div>
         </div>
+
         <div class="flex items-center space-x-2">
           <button onclick="copyRoomLink()" class="text-slate-400 hover:text-indigo-400 flex items-center space-x-1 px-2 py-1 rounded bg-slate-800/60 hover:bg-slate-800 transition-colors">
             <i class="fa-regular fa-copy"></i>
-            <span class="hidden sm:inline">Copy Link</span>
-          </button>
-          <button onclick="openShareModal()" class="text-slate-400 hover:text-indigo-400 flex items-center space-x-1 px-2 py-1 rounded bg-slate-800/60 hover:bg-slate-800 transition-colors">
-            <i class="fa-solid fa-qrcode"></i>
-            <span>QR Code</span>
+            <span class="hidden sm:inline">Link</span>
           </button>
         </div>
       </div>
 
-      <!-- Messages Area -->
+      <!-- Messages Container -->
       <div id="messages-container" class="flex-1 overflow-y-auto p-4 space-y-4">
         <div id="waiting-placeholder" class="h-full flex flex-col items-center justify-center text-center p-6 space-y-4">
           <div class="w-16 h-16 rounded-full bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 text-2xl animate-bounce">
             <i class="fa-solid fa-user-clock"></i>
           </div>
           <div class="max-w-xs">
-            <h3 class="font-bold text-slate-200 text-base">Waiting for peer to join...</h3>
-            <p class="text-slate-400 text-xs mt-1">Send the room link or QR code to someone. Once opened, messaging & voice will activate automatically.</p>
+            <h3 class="font-bold text-slate-200 text-base">Waiting for peers to join...</h3>
+            <p class="text-slate-400 text-xs mt-1">Share the room link or QR code to allow anyone to connect directly.</p>
           </div>
           <button onclick="openShareModal()" class="bg-indigo-600 hover:bg-indigo-500 text-white font-medium px-4 py-2 rounded-xl text-xs flex items-center space-x-2 shadow-lg shadow-indigo-600/20">
             <i class="fa-solid fa-share-nodes"></i>
             <span>Share Room Link</span>
           </button>
         </div>
+      </div>
+
+      <!-- New Messages Floating Banner (When Scrolled Up) -->
+      <button id="new-msg-scroll-btn" onclick="scrollToBottom(true)" class="hidden absolute bottom-16 right-6 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold px-3 py-1.5 rounded-full shadow-xl z-20 flex items-center space-x-1.5 transition-all animate-bounce">
+        <i class="fa-solid fa-arrow-down"></i>
+        <span>New messages below</span>
+      </button>
+
+      <!-- Quoted Reply Preview Bar -->
+      <div id="reply-preview-bar" class="hidden bg-slate-900 border-t border-slate-800 px-4 py-2 flex items-center justify-between shrink-0 text-xs">
+        <div class="flex items-center space-x-2 truncate">
+          <i class="fa-solid fa-reply text-indigo-400"></i>
+          <span class="text-slate-400">Replying to <b id="reply-target-user" class="text-slate-200">User</b>:</span>
+          <span id="reply-target-text" class="text-slate-300 italic truncate max-w-xs">"Message..."</span>
+        </div>
+        <button onclick="cancelReply()" class="text-slate-400 hover:text-slate-200 p-1">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
       </div>
 
       <!-- Typing Indicator -->
@@ -285,58 +361,268 @@
           <span class="w-1.5 h-1.5 bg-indigo-400 rounded-full animate-bounce" style="animation-delay: 150ms"></span>
           <span class="w-1.5 h-1.5 bg-indigo-400 rounded-full animate-bounce" style="animation-delay: 300ms"></span>
         </span>
-        <span id="typing-text">Peer is typing...</span>
+        <span id="typing-text">Someone is typing...</span>
       </div>
 
-      <!-- Chat Input Section -->
-      <div class="p-3 bg-slate-900 border-t border-slate-800 shrink-0">
+      <!-- Chat Input Toolbar -->
+      <div class="p-3 bg-slate-900/90 border-t border-slate-800/80 shrink-0 relative backdrop-blur-md">
         <form onsubmit="handleSendText(event)" class="flex items-end space-x-2">
           
-          <label class="p-2.5 text-slate-400 hover:text-indigo-400 hover:bg-slate-800 rounded-xl cursor-pointer transition-colors shrink-0" title="Attach Image or File">
-            <i class="fa-solid fa-paperclip text-lg"></i>
-            <input type="file" id="file-input" class="hidden" onchange="handleFileSelect(event)" />
-          </label>
+          <!-- Plus (+) Action Menu Button -->
+          <div class="relative shrink-0">
+            <button type="button" onclick="togglePlusMenu(event)" class="p-2.5 text-slate-400 hover:text-indigo-400 hover:bg-slate-800 rounded-xl transition-colors flex items-center justify-center w-11 h-11" title="Attach / Actions">
+              <i class="fa-solid fa-plus text-lg"></i>
+            </button>
 
+            <!-- Floating Plus Action Popover Menu -->
+            <div id="plus-menu-popover" class="hidden absolute bottom-14 left-0 w-52 bg-slate-900 border border-slate-800 rounded-xl shadow-2xl z-30 overflow-hidden py-1">
+              <button type="button" onclick="triggerFileUploadOption()" class="w-full text-left px-3.5 py-2 text-xs text-slate-200 hover:bg-slate-800 flex items-center space-x-2.5 transition-colors">
+                <i class="fa-solid fa-folder-open text-indigo-400 w-4"></i>
+                <span>Upload File / Image</span>
+              </button>
+              <button type="button" onclick="openPollModal()" class="w-full text-left px-3.5 py-2 text-xs text-slate-200 hover:bg-slate-800 flex items-center space-x-2.5 transition-colors">
+                <i class="fa-solid fa-square-poll-vertical text-emerald-400 w-4"></i>
+                <span>Create Poll</span>
+              </button>
+              <button type="button" onclick="openViewportModal()" class="w-full text-left px-3.5 py-2 text-xs text-slate-200 hover:bg-slate-800 flex items-center space-x-2.5 transition-colors">
+                <i class="fa-solid fa-code text-amber-400 w-4"></i>
+                <span>Upload Viewport (Code)</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Hidden Input for Plus Menu File Option -->
+          <input type="file" id="file-input" class="hidden" onchange="handleFileSelect(event)" />
+
+          <!-- Chat Textarea -->
           <div class="flex-1 relative">
             <textarea id="chat-input" rows="1" placeholder="Type a message or drop files here..." 
               oninput="handleInputChange(this)" onkeydown="handleKeyDown(event)"
               class="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-xl px-3.5 py-2.5 text-sm text-slate-100 placeholder-slate-500 outline-none resize-none max-h-32 min-h-[42px] transition-all"></textarea>
           </div>
 
-          <button type="submit" id="send-btn" class="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed text-white p-2.5 rounded-xl transition-all shrink-0 flex items-center justify-center w-11 h-11">
+          <!-- Send Button -->
+          <button type="submit" id="send-btn" class="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white p-2.5 rounded-xl transition-all shrink-0 flex items-center justify-center w-11 h-11 shadow-lg shadow-indigo-600/20">
             <i class="fa-solid fa-paper-plane text-sm"></i>
           </button>
         </form>
       </div>
 
-      <!-- Drag & Drop Overlay Zone -->
+      <!-- Drag & Drop Visual Overlay Zone -->
       <div id="drop-overlay" class="absolute inset-0 bg-slate-950/90 border-4 border-dashed border-indigo-500 rounded-xl flex flex-col items-center justify-center z-30 opacity-0 pointer-events-none transition-opacity">
         <i class="fa-solid fa-cloud-arrow-up text-5xl text-indigo-400 mb-3 animate-bounce"></i>
-        <p class="text-slate-200 font-bold text-lg">Drop file to send directly to peer</p>
-        <p class="text-slate-400 text-xs mt-1">Supports Images, Documents, Videos, Archives & more</p>
+        <p class="text-slate-200 font-bold text-lg">Drop file to share with room</p>
+        <p class="text-slate-400 text-xs mt-1">Images, Documents, Media & Code Viewports</p>
       </div>
 
     </div>
 
   </main>
 
-  <!-- MODAL: ROOM SHARE & QR CODE -->
-  <div id="share-modal" class="fixed inset-0 bg-slate-950/80 modal-backdrop z-50 flex items-center justify-center p-4 hidden">
-    <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-sm w-full p-6 space-y-5 relative shadow-2xl">
+  <!-- FLOATING RIGHT-CLICK CONTEXT MENU -->
+  <div id="context-menu" class="hidden fixed w-48 bg-slate-900 border border-slate-800 rounded-xl shadow-2xl z-50 overflow-hidden py-1 text-xs">
+    <button onclick="executeContextMenuCopy()" class="w-full text-left px-3.5 py-2 text-slate-200 hover:bg-slate-800 flex items-center space-x-2">
+      <i class="fa-regular fa-copy text-indigo-400 w-4"></i>
+      <span>Copy Message</span>
+    </button>
+    <button onclick="executeContextMenuReply()" class="w-full text-left px-3.5 py-2 text-slate-200 hover:bg-slate-800 flex items-center space-x-2">
+      <i class="fa-solid fa-reply text-emerald-400 w-4"></i>
+      <span>Reply</span>
+    </button>
+    
+    <div class="border-t border-slate-800 my-1"></div>
+    <div class="px-3.5 py-1 text-[10px] font-semibold text-slate-500 uppercase tracking-wider">React</div>
+    
+    <div class="px-2 py-1 flex items-center justify-around text-base">
+      <button onclick="addEmojiReaction('👍')" class="hover:scale-125 transition-transform">👍</button>
+      <button onclick="addEmojiReaction('❤️')" class="hover:scale-125 transition-transform">❤️</button>
+      <button onclick="addEmojiReaction('😂')" class="hover:scale-125 transition-transform">😂</button>
+      <button onclick="addEmojiReaction('😮')" class="hover:scale-125 transition-transform">😮</button>
+      <button onclick="addEmojiReaction('🔥')" class="hover:scale-125 transition-transform">🔥</button>
+    </div>
+
+    <button onclick="triggerCustomImageReaction()" class="w-full text-left px-3.5 py-1.5 text-slate-300 hover:bg-slate-800 flex items-center space-x-2">
+      <i class="fa-solid fa-image text-amber-400 w-4"></i>
+      <span>Custom Image Reaction</span>
+    </button>
+  </div>
+
+  <!-- MODAL: SETTINGS & CUSTOM THEMES -->
+  <div id="settings-modal" class="fixed inset-0 bg-slate-950/80 modal-backdrop z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 space-y-5 relative shadow-2xl max-h-[90vh] overflow-y-auto">
       
-      <button onclick="closeShareModal()" class="absolute top-4 right-4 text-slate-400 hover:text-slate-200">
+      <button onclick="closeSettingsModal()" class="absolute top-4 right-4 text-slate-400 hover:text-slate-200">
         <i class="fa-solid fa-xmark text-lg"></i>
       </button>
 
-      <div class="text-center space-y-1">
-        <h3 class="text-lg font-bold text-white">Invite Your Peer</h3>
-        <p class="text-slate-400 text-xs">Scan QR code or send link to start chatting</p>
+      <div class="flex items-center space-x-2.5">
+        <div class="p-2 rounded-lg bg-indigo-500/10 text-indigo-400">
+          <i class="fa-solid fa-palette text-lg"></i>
+        </div>
+        <div>
+          <h3 class="text-base font-bold text-white">Theme & Display Settings</h3>
+          <p class="text-xs text-slate-400">Customize colors, wallpaper, and glass effects</p>
+        </div>
       </div>
 
+      <!-- iPhone Glass Switch -->
+      <div class="flex items-center justify-between p-3 bg-slate-950/60 rounded-xl border border-slate-800">
+        <div>
+          <p class="text-xs font-semibold text-slate-200">"iPhone Glass" Look</p>
+          <p class="text-[11px] text-slate-400">Frosted glassmorphism message bubbles</p>
+        </div>
+        <label class="relative inline-flex items-center cursor-pointer">
+          <input type="checkbox" id="setting-glass-toggle" class="sr-only peer" onchange="toggleGlassMode(this.checked)">
+          <div class="w-9 h-5 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-600"></div>
+        </label>
+      </div>
+
+      <!-- Color Pickers -->
+      <div class="space-y-3">
+        <h4 class="text-xs font-semibold text-slate-300 uppercase tracking-wider">Color Wheel Customization</h4>
+        
+        <div class="grid grid-cols-3 gap-3">
+          <div class="bg-slate-950/60 border border-slate-800 p-2.5 rounded-xl text-center space-y-1.5">
+            <label class="block text-[11px] text-slate-400 font-medium">Background</label>
+            <input type="color" id="setting-bg-color" value="#020617" onchange="updateBgColor(this.value)" class="w-8 h-8 rounded cursor-pointer bg-transparent border-0 mx-auto block" />
+          </div>
+
+          <div class="bg-slate-950/60 border border-slate-800 p-2.5 rounded-xl text-center space-y-1.5">
+            <label class="block text-[11px] text-slate-400 font-medium">Your Bubbles</label>
+            <input type="color" id="setting-self-color" value="#4f46e5" onchange="updateSelfBubbleColor(this.value)" class="w-8 h-8 rounded cursor-pointer bg-transparent border-0 mx-auto block" />
+          </div>
+
+          <div class="bg-slate-950/60 border border-slate-800 p-2.5 rounded-xl text-center space-y-1.5">
+            <label class="block text-[11px] text-slate-400 font-medium">Peer Bubbles</label>
+            <input type="color" id="setting-peer-color" value="#1e293b" onchange="updatePeerBubbleColor(this.value)" class="w-8 h-8 rounded cursor-pointer bg-transparent border-0 mx-auto block" />
+          </div>
+        </div>
+      </div>
+
+      <!-- Media Background Wallpaper Upload -->
+      <div class="space-y-2">
+        <h4 class="text-xs font-semibold text-slate-300 uppercase tracking-wider">Custom Background Wallpaper</h4>
+        <div class="bg-slate-950/60 border border-slate-800 p-3 rounded-xl space-y-2">
+          <label class="block text-xs text-slate-400">Upload Image or Video (.mp4, .webm, .png, .jpg)</label>
+          <input type="file" id="setting-wallpaper-file" accept="image/*,video/*" onchange="handleWallpaperUpload(event)" 
+            class="block w-full text-xs text-slate-400 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-slate-800 file:text-slate-200 hover:file:bg-slate-700" />
+          <button onclick="clearWallpaper()" class="text-[11px] text-rose-400 hover:underline pt-1 block">Remove Wallpaper</button>
+        </div>
+      </div>
+
+      <button onclick="closeSettingsModal()" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-semibold py-2.5 rounded-xl text-xs transition-colors">
+        Done
+      </button>
+
+    </div>
+  </div>
+
+  <!-- MODAL: POLL CREATION -->
+  <div id="poll-modal" class="fixed inset-0 bg-slate-950/80 modal-backdrop z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-sm w-full p-5 space-y-4 relative shadow-2xl">
+      
+      <button onclick="closePollModal()" class="absolute top-4 right-4 text-slate-400 hover:text-slate-200">
+        <i class="fa-solid fa-xmark text-lg"></i>
+      </button>
+
+      <div class="flex items-center space-x-2">
+        <i class="fa-solid fa-square-poll-vertical text-emerald-400 text-xl"></i>
+        <h3 class="text-base font-bold text-white">Create Room Poll</h3>
+      </div>
+
+      <div class="space-y-3">
+        <div>
+          <label class="block text-xs text-slate-400 mb-1">Poll Question</label>
+          <input type="text" id="poll-question-input" placeholder="e.g. Which feature should we build next?" 
+            class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-100 outline-none focus:border-indigo-500" />
+        </div>
+
+        <div class="space-y-2">
+          <label class="block text-xs text-slate-400">Options</label>
+          <div id="poll-options-container" class="space-y-2">
+            <input type="text" class="poll-opt-input w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-100 outline-none" placeholder="Option 1" />
+            <input type="text" class="poll-opt-input w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-100 outline-none" placeholder="Option 2" />
+          </div>
+          <button type="button" onclick="addPollOptionInput()" class="text-[11px] text-indigo-400 hover:underline flex items-center space-x-1">
+            <i class="fa-solid fa-plus text-[10px]"></i>
+            <span>Add Option</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="flex space-x-3 pt-2">
+        <button onclick="closePollModal()" class="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold py-2 rounded-xl text-xs transition-colors">
+          Cancel
+        </button>
+        <button onclick="submitPoll()" class="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold py-2 rounded-xl text-xs transition-colors shadow-lg shadow-emerald-600/20">
+          Broadcast Poll
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- MODAL: VIEWPORT (CODE RUNNER) CREATION -->
+  <div id="viewport-modal" class="fixed inset-0 bg-slate-950/80 modal-backdrop z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-lg w-full p-5 space-y-4 relative shadow-2xl">
+      
+      <button onclick="closeViewportModal()" class="absolute top-4 right-4 text-slate-400 hover:text-slate-200">
+        <i class="fa-solid fa-xmark text-lg"></i>
+      </button>
+
+      <div class="flex items-center space-x-2">
+        <i class="fa-solid fa-code text-amber-400 text-xl"></i>
+        <div>
+          <h3 class="text-base font-bold text-white">Upload Viewport (Code Window)</h3>
+          <p class="text-xs text-slate-400">Share HTML/CSS/JS snippets executable inline by peers</p>
+        </div>
+      </div>
+
+      <div>
+        <label class="block text-xs text-slate-400 mb-1">HTML/CSS/JS Code</label>
+        <textarea id="viewport-code-input" rows="8" placeholder="<h1>Hello World</h1><button onclick='alert(&quot;Hi&quot;)'>Click Me</button>" 
+          class="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs font-mono text-emerald-400 outline-none focus:border-amber-500 resize-none"></textarea>
+      </div>
+
+      <div class="flex space-x-3">
+        <button onclick="closeViewportModal()" class="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold py-2 rounded-xl text-xs transition-colors">
+          Cancel
+        </button>
+        <button onclick="submitViewportCode()" class="flex-1 bg-amber-600 hover:bg-amber-500 text-white font-semibold py-2 rounded-xl text-xs transition-colors shadow-lg shadow-amber-600/20">
+          Broadcast Viewport
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- MODAL: VIEWPORT FULLSCREEN EXECUTION OVERLAY -->
+  <div id="viewport-fullscreen-modal" class="fixed inset-0 bg-slate-950 z-50 flex flex-col hidden">
+    <div class="bg-slate-900 border-b border-slate-800 px-4 py-3 flex items-center justify-between shrink-0">
+      <div class="flex items-center space-x-2">
+        <i class="fa-solid fa-display text-amber-400"></i>
+        <span class="text-xs font-bold text-slate-100">Fullscreen Running Viewport</span>
+      </div>
+      <button onclick="closeFullscreenViewport()" class="bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs px-3 py-1.5 rounded-lg">
+        <i class="fa-solid fa-xmark"></i> Close
+      </button>
+    </div>
+    <iframe id="fullscreen-viewport-iframe" class="flex-1 w-full h-full bg-white border-0"></iframe>
+  </div>
+
+  <!-- MODAL: ROOM SHARE & QR CODE -->
+  <div id="share-modal" class="fixed inset-0 bg-slate-950/80 modal-backdrop z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-sm w-full p-6 space-y-5 relative shadow-2xl">
+      <button onclick="closeShareModal()" class="absolute top-4 right-4 text-slate-400 hover:text-slate-200">
+        <i class="fa-solid fa-xmark text-lg"></i>
+      </button>
+      <div class="text-center space-y-1">
+        <h3 class="text-lg font-bold text-white">Invite Peers</h3>
+        <p class="text-slate-400 text-xs">Scan QR code or share room link</p>
+      </div>
       <div class="bg-white p-4 rounded-xl flex items-center justify-center shadow-inner w-48 h-48 mx-auto">
         <div id="qrcode"></div>
       </div>
-
       <div class="space-y-2">
         <label class="block text-xs text-slate-400 font-medium">Direct Share Link</label>
         <div class="flex items-center space-x-2">
@@ -346,12 +632,64 @@
           </button>
         </div>
       </div>
-
-      <p class="text-[11px] text-slate-500 text-center">Connection will establish automatically once peer opens link.</p>
     </div>
   </div>
 
-  <!-- MODAL: FULL IMAGE PREVIEW -->
+  <!-- MODAL: FILE SEND CONFIRMATION -->
+  <div id="file-confirm-modal" class="fixed inset-0 bg-slate-950/80 modal-backdrop z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-sm w-full p-5 space-y-4 relative shadow-2xl">
+      <button onclick="cancelStagedFile()" class="absolute top-4 right-4 text-slate-400 hover:text-slate-200">
+        <i class="fa-solid fa-xmark text-lg"></i>
+      </button>
+      <div class="text-center space-y-1">
+        <h3 class="text-lg font-bold text-white">Confirm Attachment</h3>
+        <p class="text-slate-400 text-xs">Review file before broadcasting to peers</p>
+      </div>
+      <div class="bg-slate-950 border border-slate-800 rounded-xl p-3 flex flex-col items-center justify-center min-h-[140px] max-h-[220px] overflow-hidden relative">
+        <img id="confirm-file-preview-img" src="" class="max-h-[180px] w-auto rounded-lg object-contain hidden" />
+        <div id="confirm-file-icon-container" class="w-16 h-16 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400">
+          <i id="confirm-file-icon" class="fa-solid fa-file text-3xl"></i>
+        </div>
+      </div>
+      <div class="bg-slate-800/50 border border-slate-700/50 rounded-xl p-3 space-y-1">
+        <p id="confirm-file-name" class="text-xs font-semibold text-slate-100 truncate text-center">filename.jpg</p>
+        <p id="confirm-file-size" class="text-[11px] text-slate-400 text-center">0 B</p>
+      </div>
+      <div class="flex space-x-3">
+        <button onclick="cancelStagedFile()" class="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold py-2.5 rounded-xl border border-slate-700 text-xs transition-colors">
+          Cancel
+        </button>
+        <button onclick="sendStagedFile()" class="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold py-2.5 rounded-xl shadow-lg shadow-indigo-600/25 text-xs flex items-center justify-center space-x-1.5 transition-colors">
+          <i class="fa-solid fa-paper-plane"></i>
+          <span>Send File</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: INCOMING VOICE CALL BANNER -->
+  <div id="incoming-call-modal" class="fixed inset-0 bg-slate-950/80 modal-backdrop z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-slate-900 border border-indigo-500/40 rounded-2xl max-w-sm w-full p-6 text-center space-y-5 shadow-2xl">
+      <div class="w-20 h-20 rounded-full bg-emerald-500/20 border-2 border-emerald-500/50 flex items-center justify-center text-emerald-400 text-3xl mx-auto animate-pulse">
+        <i class="fa-solid fa-phone-volume"></i>
+      </div>
+      <div>
+        <h3 class="text-lg font-bold text-white">Incoming Voice Call</h3>
+        <p class="text-xs text-slate-400 mt-1">Peer invites you to an encrypted audio call.</p>
+      </div>
+      <div class="flex space-x-3 pt-2">
+        <button onclick="declineIncomingCall()" class="flex-1 bg-slate-800 hover:bg-rose-950/60 hover:text-rose-400 text-slate-300 font-semibold py-3 rounded-xl border border-slate-700 text-xs transition-colors">
+          Decline
+        </button>
+        <button onclick="acceptIncomingCall()" class="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold py-3 rounded-xl shadow-lg text-xs flex items-center justify-center space-x-2">
+          <i class="fa-solid fa-phone"></i>
+          <span>Accept Call</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: IMAGE LIGHTBOX PREVIEW -->
   <div id="image-modal" class="fixed inset-0 bg-slate-950/90 modal-backdrop z-50 flex items-center justify-center p-4 hidden">
     <div class="relative max-w-4xl max-h-full flex flex-col items-center">
       <button onclick="closeImageModal()" class="absolute -top-10 right-0 text-slate-300 hover:text-white text-xl">
@@ -367,95 +705,39 @@
     </div>
   </div>
 
-  <!-- MODAL: FILE SEND CONFIRMATION -->
-  <div id="file-confirm-modal" class="fixed inset-0 bg-slate-950/80 modal-backdrop z-50 flex items-center justify-center p-4 hidden">
-    <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-sm w-full p-5 space-y-4 relative shadow-2xl">
-      
-      <button onclick="cancelStagedFile()" class="absolute top-4 right-4 text-slate-400 hover:text-slate-200">
-        <i class="fa-solid fa-xmark text-lg"></i>
-      </button>
-
-      <div class="text-center space-y-1">
-        <h3 class="text-lg font-bold text-white">Confirm Attachment</h3>
-        <p class="text-slate-400 text-xs">Review file before sending to peer</p>
-      </div>
-
-      <div class="bg-slate-950 border border-slate-800 rounded-xl p-3 flex flex-col items-center justify-center min-h-[140px] max-h-[220px] overflow-hidden relative">
-        <img id="confirm-file-preview-img" src="" class="max-h-[180px] w-auto rounded-lg object-contain hidden" />
-        <div id="confirm-file-icon-container" class="w-16 h-16 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400">
-          <i id="confirm-file-icon" class="fa-solid fa-file text-3xl"></i>
-        </div>
-      </div>
-
-      <div class="bg-slate-800/50 border border-slate-700/50 rounded-xl p-3 space-y-1">
-        <p id="confirm-file-name" class="text-xs font-semibold text-slate-100 truncate text-center">filename.jpg</p>
-        <p id="confirm-file-size" class="text-[11px] text-slate-400 text-center">0 B</p>
-      </div>
-
-      <div class="flex space-x-3">
-        <button onclick="cancelStagedFile()" class="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold py-2.5 rounded-xl border border-slate-700 text-xs transition-colors">
-          Cancel
-        </button>
-        <button onclick="sendStagedFile()" class="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold py-2.5 rounded-xl shadow-lg shadow-indigo-600/25 text-xs flex items-center justify-center space-x-1.5 transition-colors">
-          <i class="fa-solid fa-paper-plane"></i>
-          <span>Send File</span>
-        </button>
-      </div>
-
-    </div>
-  </div>
-
-  <!-- MODAL: INCOMING VOICE CALL BANNER -->
-  <div id="incoming-call-modal" class="fixed inset-0 bg-slate-950/80 modal-backdrop z-50 flex items-center justify-center p-4 hidden">
-    <div class="bg-slate-900 border border-indigo-500/40 rounded-2xl max-w-sm w-full p-6 text-center space-y-5 shadow-2xl animate-bounce-short">
-      
-      <div class="w-20 h-20 rounded-full bg-emerald-500/20 border-2 border-emerald-500/50 flex items-center justify-center text-emerald-400 text-3xl mx-auto animate-pulse">
-        <i class="fa-solid fa-phone-volume"></i>
-      </div>
-
-      <div>
-        <h3 class="text-lg font-bold text-white">Incoming Voice Call</h3>
-        <p class="text-xs text-slate-400 mt-1">Your peer is inviting you to an encrypted audio call.</p>
-      </div>
-
-      <div class="flex space-x-3 pt-2">
-        <button onclick="declineIncomingCall()" class="flex-1 bg-slate-800 hover:bg-rose-950/60 hover:text-rose-400 text-slate-300 font-semibold py-3 rounded-xl border border-slate-700 text-xs transition-colors flex items-center justify-center space-x-2">
-          <i class="fa-solid fa-phone-slash"></i>
-          <span>Decline</span>
-        </button>
-        <button onclick="acceptIncomingCall()" class="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold py-3 rounded-xl shadow-lg shadow-emerald-600/25 text-xs flex items-center justify-center space-x-2 transition-colors">
-          <i class="fa-solid fa-phone"></i>
-          <span>Accept Call</span>
-        </button>
-      </div>
-
-    </div>
-  </div>
-
   <!-- TOAST CONTAINER -->
   <div id="toast-container" class="fixed bottom-4 right-4 z-50 space-y-2 pointer-events-none"></div>
 
 
-  <!-- APPLICATION SCRIPT LOGIC -->
+  <!-- APPLICATION LOGIC & WEBRTC ENGINE -->
   <script>
-    // GLOBAL STATE
+    // GLOBAL STATE & PEER NETWORK ARCHITECTURE
     let peer = null;
-    let activeConn = null;
+    let peersMap = {}; // Host stores peer connections: { peerId: conn }
+    let activeConn = null; // Peer stores active connection to Host
     let myPeerId = null;
+    let myUsername = 'Guest_' + Math.floor(1000 + Math.random() * 9000);
     let currentRoomId = null;
     let isHost = false;
     let soundEnabled = true;
 
-    // Heartbeat & Reconnection State
+    // Heartbeat State
     let pingInterval = null;
-    let heartbeatCheckInterval = null;
-    let peerServerPingInterval = null;
-    let lastPongTime = Date.now();
-    let isReconnecting = false;
 
-    // File Stage State
+    // Context Menu Target Message
+    let contextTargetMsgId = null;
+    let contextTargetText = '';
+    let contextTargetUser = '';
+
+    // Quoted Reply State
+    let replyingTo = null;
+
+    // Staged File Upload
     let stagedFile = null;
     let stagedFileDataUrl = null;
+
+    // Polls & Messages Memory Store
+    let pollsStore = {};
 
     // Typing State
     let typingTimer = null;
@@ -471,7 +753,7 @@
     let analyserNode = null;
     let visualizerAnimFrame = null;
 
-    // WebRTC Public STUN Configuration
+    // WebRTC STUN Servers
     const peerConfig = {
       config: {
         iceServers: [
@@ -497,19 +779,24 @@
     const leaveBtn = document.getElementById('leave-btn');
     const chatRoomIdDisplay = document.getElementById('chat-room-id-display');
     const dropOverlay = document.getElementById('drop-overlay');
+    const onlineCount = document.getElementById('online-count');
+    const usernameInput = document.getElementById('username-input');
 
     // INITIALIZATION
     window.addEventListener('DOMContentLoaded', () => {
+      usernameInput.value = myUsername;
       setupDragAndDrop();
+      setupContextMenuDismiss();
+      setupSmartScrollListener();
 
       const hash = window.location.hash.replace('#', '').trim();
       if (hash) {
-        showToast('Found room link! Connecting...', 'info');
-        joinRoom(hash);
+        showToast('Found share link! Connect when ready.', 'info');
+        document.getElementById('room-input').value = hash;
       }
     });
 
-    // WEB AUDIO API SOUND SYNTHESIZERS
+    // WEBAUDIO SOUND SYNTHESIZER
     function playNotificationSound() {
       if (!soundEnabled) return;
       try {
@@ -517,8 +804,8 @@
         const osc = audioCtx.createOscillator();
         const gain = audioCtx.createGain();
         osc.type = 'sine';
-        osc.frequency.setValueAtTime(587.33, audioCtx.currentTime); // D5
-        osc.frequency.exponentialRampToValueAtTime(880, audioCtx.currentTime + 0.12); // A5
+        osc.frequency.setValueAtTime(587.33, audioCtx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(880, audioCtx.currentTime + 0.12);
         gain.gain.setValueAtTime(0.12, audioCtx.currentTime);
         gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.25);
         osc.connect(gain);
@@ -528,79 +815,100 @@
       } catch (e) {}
     }
 
-    function playRingtoneSound() {
-      if (!soundEnabled) return;
-      try {
-        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        const osc = audioCtx.createOscillator();
-        const gain = audioCtx.createGain();
-        osc.type = 'triangle';
-        osc.frequency.setValueAtTime(440, audioCtx.currentTime);
-        osc.frequency.setValueAtTime(880, audioCtx.currentTime + 0.2);
-        gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.4);
-        osc.connect(gain);
-        gain.connect(audioCtx.destination);
-        osc.start();
-        osc.stop(audioCtx.currentTime + 0.4);
-      } catch (e) {}
-    }
-
     function toggleSound() {
       soundEnabled = !soundEnabled;
       const icon = document.getElementById('sound-icon');
       if (soundEnabled) {
         icon.className = 'fa-solid fa-volume-high';
-        showToast('Sound notifications enabled', 'info');
+        showToast('Sounds enabled', 'info');
       } else {
         icon.className = 'fa-solid fa-volume-xmark text-slate-500';
-        showToast('Sound notifications muted', 'info');
+        showToast('Sounds muted', 'info');
       }
     }
 
-    // CONNECTION STATUS UI
+    // USERNAME & STATUS HELPERS
+    function getCleanUsername() {
+      const val = usernameInput.value.trim();
+      if (val) myUsername = val;
+      return myUsername;
+    }
+
     function setConnectionStatus(state, message) {
       statusDot.className = 'w-2.5 h-2.5 rounded-full ';
       retryConnBtn.classList.add('hidden');
 
       if (state === 'connected') {
-        statusDot.className += 'bg-emerald-500 animate-pulse-dot shadow-lg shadow-emerald-500/50';
-        statusText.textContent = message || 'Connected Direct';
+        statusDot.className += 'bg-emerald-500 animate-pulse shadow-lg shadow-emerald-500/50';
+        statusText.textContent = message || 'Connected';
         statusText.className = 'text-emerald-400 font-medium';
-        isReconnecting = false;
-      } else if (state === 'reconnecting' || state === 'connecting') {
+      } else if (state === 'connecting' || state === 'reconnecting') {
         statusDot.className += 'bg-amber-500 animate-pulse';
         statusText.textContent = message || 'Connecting...';
         statusText.className = 'text-amber-400 font-medium';
       } else {
         statusDot.className += 'bg-rose-500';
-        statusText.textContent = message || 'Disconnected';
+        statusText.textContent = message || 'Lobby';
         statusText.className = 'text-rose-400';
-        retryConnBtn.classList.remove('hidden');
+        if (currentRoomId) retryConnBtn.classList.remove('hidden');
       }
     }
 
-    // HOST A NEW ROOM
+    function setHostBtnLoading(isLoading) {
+      const hostBtn = document.getElementById('host-room-btn');
+      const icon = document.getElementById('host-btn-icon');
+      const text = document.getElementById('host-btn-text');
+
+      if (isLoading) {
+        hostBtn.disabled = true;
+        icon.className = 'fa-solid fa-circle-notch fa-spin text-lg';
+        text.textContent = 'Creating Room...';
+      } else {
+        hostBtn.disabled = false;
+        icon.className = 'fa-solid fa-plus-circle text-lg';
+        text.textContent = 'Host Multi-User Room';
+      }
+    }
+
+    // HOST ROOM - WITH TIMEOUT SAFEGUARD & AUTO-ID FALLBACK
     function hostRoom() {
+      if (typeof Peer === 'undefined') {
+        showToast('PeerJS engine loading... please try again in a second.', 'error');
+        return;
+      }
+
+      getCleanUsername();
       const generatedId = 'beam-' + Math.random().toString(36).substring(2, 8);
       currentRoomId = generatedId;
       isHost = true;
 
+      setHostBtnLoading(true);
       setConnectionStatus('connecting', 'Creating Room...');
-      peer = new Peer(currentRoomId, peerConfig);
 
-      setupPeerListeners();
+      let hostTimeout = setTimeout(() => {
+        if (peer && !myPeerId) {
+          console.warn('Custom ID registration timed out, falling back to auto-generated Peer ID...');
+          try { peer.destroy(); } catch(e){}
+          initializePeerWithFallback(null);
+        }
+      }, 5000);
+
+      initializePeerWithFallback(currentRoomId, hostTimeout);
     }
 
-    // JOIN AN EXISTING ROOM
+    // JOIN ROOM
     function joinRoom(targetRoomId) {
-      if (targetRoomId.includes('#')) {
-        targetRoomId = targetRoomId.split('#')[1];
+      if (typeof Peer === 'undefined') {
+        showToast('PeerJS engine loading... please try again in a second.', 'error');
+        return;
       }
+
+      getCleanUsername();
+      if (targetRoomId.includes('#')) targetRoomId = targetRoomId.split('#')[1];
       targetRoomId = targetRoomId.trim();
 
       if (!targetRoomId) {
-        showToast('Please enter a valid Room ID', 'error');
+        showToast('Enter a valid Room ID', 'error');
         return;
       }
 
@@ -608,9 +916,7 @@
       isHost = false;
 
       setConnectionStatus('connecting', 'Connecting...');
-      peer = new Peer(peerConfig);
-
-      setupPeerListeners();
+      initializePeerWithFallback(null, null);
     }
 
     function handleManualJoin(e) {
@@ -619,181 +925,196 @@
       if (val) joinRoom(val);
     }
 
-    // PEERJS EVENT LISTENERS SETUP
-    function setupPeerListeners() {
+    // PEERJS SAFE INITIALIZATION
+    function initializePeerWithFallback(requestedId, timeoutTimer = null) {
+      try {
+        if (peer && !peer.destroyed) {
+          try { peer.destroy(); } catch(e){}
+        }
+
+        if (requestedId) {
+          peer = new Peer(requestedId, peerConfig);
+        } else {
+          peer = new Peer(peerConfig);
+        }
+      } catch(err) {
+        if (timeoutTimer) clearTimeout(timeoutTimer);
+        setHostBtnLoading(false);
+        showToast('Failed to initialize WebRTC engine.', 'error');
+        setConnectionStatus('disconnected', 'Lobby');
+        return;
+      }
+
       peer.on('open', (id) => {
+        if (timeoutTimer) clearTimeout(timeoutTimer);
+        setHostBtnLoading(false);
+
         myPeerId = id;
+        currentRoomId = isHost ? id : currentRoomId; // Sync ID
         window.location.hash = currentRoomId;
         switchToChatView();
 
         if (isHost) {
-          setConnectionStatus('connecting', 'Waiting for Peer...');
+          setConnectionStatus('connected', 'Room Host Active');
           openShareModal();
+          updateOnlinePeerCount();
         } else {
-          // Connect to Host
-          connectDataChannel(currentRoomId);
+          connectToHost(currentRoomId);
         }
 
-        // Keep signaling server connection alive
         startPeerServerKeepAlive();
       });
 
-      peer.on('connection', (conn) => {
-        handlePeerConnection(conn);
+      peer.on('error', (err) => {
+        if (timeoutTimer) clearTimeout(timeoutTimer);
+        setHostBtnLoading(false);
+        console.error('PeerJS error:', err);
+
+        if (err.type === 'unavailable-id' && requestedId) {
+          showToast('Room ID occupied, auto-generating unique ID...', 'warning');
+          initializePeerWithFallback(null, null); // Fallback to auto-generated ID
+          return;
+        }
+
+        showToast('Connection issue: ' + (err.type || 'Signal server timeout'), 'error');
+        setConnectionStatus('disconnected', 'Error');
       });
 
-      // Handle Incoming Voice Calls
+      // Host receives incoming peer connections
+      peer.on('connection', (conn) => {
+        if (!isHost) return;
+        setupHostPeerConnection(conn);
+      });
+
+      // Incoming Voice Call
       peer.on('call', (call) => {
         pendingIncomingCall = call;
-        playRingtoneSound();
         document.getElementById('incoming-call-modal').classList.remove('hidden');
       });
 
       peer.on('disconnected', () => {
-        setConnectionStatus('reconnecting', 'Signaling Lost...');
+        setConnectionStatus('reconnecting', 'Signal lost...');
         if (peer && !peer.destroyed) {
-          peer.reconnect();
+          try { peer.reconnect(); } catch(e){}
         }
-      });
-
-      peer.on('error', (err) => {
-        console.error('PeerJS Error:', err);
-        if (err.type === 'peer-not-found') {
-          showToast('Room or peer not found.', 'error');
-        } else {
-          showToast('Network error: ' + err.type, 'error');
-        }
-        setConnectionStatus('disconnected', 'Connection Error');
       });
     }
 
-    // CONNECT / RECONNECT DATA CHANNEL
-    function connectDataChannel(targetId) {
+    function connectToHost(targetId) {
       const conn = peer.connect(targetId, { reliable: true });
-      handlePeerConnection(conn);
-    }
-
-    function handlePeerConnection(conn) {
       activeConn = conn;
 
-      activeConn.on('open', () => {
-        setConnectionStatus('connected', 'Direct P2P Connected');
+      conn.on('open', () => {
+        setConnectionStatus('connected', 'Connected to Room');
         switchToChatView();
-        
-        if (waitingPlaceholder) waitingPlaceholder.classList.add('hidden');
-        headerShareBtn.classList.remove('hidden');
-        voiceCallBtn.classList.remove('hidden');
-        leaveBtn.classList.remove('hidden');
-        closeShareModal();
-        
-        showToast('Connected directly to peer!', 'success');
-        appendSystemMessage('Direct WebRTC encryption tunnel established.');
 
-        // Reset Heartbeat
-        lastPongTime = Date.now();
+        // Send Join handshake to Host
+        conn.send({
+          type: 'user-join',
+          username: myUsername,
+          peerId: myPeerId
+        });
+
         startHeartbeat();
-
-        // Monitor Underlying WebRTC ICE Connection
-        if (activeConn.peerConnection) {
-          activeConn.peerConnection.oniceconnectionstatechange = () => {
-            const state = activeConn.peerConnection.iceConnectionState;
-            console.log('ICE Connection State:', state);
-            if (state === 'disconnected') {
-              setConnectionStatus('reconnecting', 'Reconnecting ICE...');
-              attemptReconnect();
-            } else if (state === 'failed') {
-              setConnectionStatus('disconnected', 'ICE Failed');
-              attemptReconnect();
-            } else if (state === 'connected' || state === 'completed') {
-              setConnectionStatus('connected', 'Direct P2P Connected');
-            }
-          };
-        }
       });
 
-      activeConn.on('data', (data) => {
-        handleIncomingData(data);
+      conn.on('data', (data) => {
+        handleIncomingDataPacket(data);
       });
 
-      activeConn.on('close', () => {
-        stopHeartbeat();
-        setConnectionStatus('disconnected', 'Peer Disconnected');
-        appendSystemMessage('Peer connection closed.');
-        voiceCallBtn.classList.add('hidden');
-        if (mediaCall) endVoiceCall(false);
-      });
-
-      activeConn.on('error', (err) => {
-        console.error('Data Channel Error:', err);
-        showToast('Data channel error occurred', 'error');
+      conn.on('close', () => {
+        setConnectionStatus('disconnected', 'Host disconnected');
+        appendSystemMessage('Disconnected from Host.');
       });
     }
 
-    // HEARTBEAT & KEEP-ALIVE MECHANISM
+    function setupHostPeerConnection(conn) {
+      conn.on('open', () => {
+        peersMap[conn.peer] = conn;
+        updateOnlinePeerCount();
+      });
+
+      conn.on('data', (data) => {
+        if (data.type === 'user-join') {
+          conn.peerUsername = data.username || 'Peer';
+          broadcastToRoom(data, null); // Relay join to all
+          appendSystemMessage(`${conn.peerUsername} joined the room.`);
+          updateOnlinePeerCount();
+          return;
+        }
+
+        // Host Relays data to all other peers in room!
+        broadcastToRoom(data, conn.peer);
+
+        // Host processes data locally
+        handleIncomingDataPacket(data);
+      });
+
+      conn.on('close', () => {
+        const name = conn.peerUsername || 'A peer';
+        delete peersMap[conn.peer];
+        updateOnlinePeerCount();
+        appendSystemMessage(`${name} left the room.`);
+      });
+    }
+
+    // BROADCAST RELAY FUNCTION (HOST -> ALL PEERS)
+    function broadcastToRoom(packet, excludePeerId) {
+      if (!isHost) {
+        if (activeConn && activeConn.open) {
+          activeConn.send(packet);
+        }
+        return;
+      }
+
+      Object.keys(peersMap).forEach(peerId => {
+        if (peerId !== excludePeerId) {
+          const c = peersMap[peerId];
+          if (c && c.open) {
+            c.send(packet);
+          }
+        }
+      });
+    }
+
+    function updateOnlinePeerCount() {
+      const count = (isHost ? Object.keys(peersMap).length : 1) + 1;
+      onlineCount.textContent = `${count} Online`;
+    }
+
+    // HEARTBEAT & KEEP-ALIVE
     function startHeartbeat() {
       stopHeartbeat();
-      
-      // Ping remote peer over WebRTC Data Channel every 4 seconds
       pingInterval = setInterval(() => {
         if (activeConn && activeConn.open) {
           activeConn.send({ type: 'ping' });
         }
       }, 4000);
-
-      // Check for Pong responses
-      heartbeatCheckInterval = setInterval(() => {
-        if (Date.now() - lastPongTime > 12000) { // No response for >12s
-          if (!isReconnecting && activeConn) {
-            setConnectionStatus('reconnecting', 'Reconnecting...');
-            attemptReconnect();
-          }
-        }
-      }, 5000);
     }
 
     function stopHeartbeat() {
       if (pingInterval) clearInterval(pingInterval);
-      if (heartbeatCheckInterval) clearInterval(heartbeatCheckInterval);
     }
 
     function startPeerServerKeepAlive() {
-      if (peerServerPingInterval) clearInterval(peerServerPingInterval);
-      peerServerPingInterval = setInterval(() => {
+      setInterval(() => {
         if (peer && peer.socket && peer.socket.isConnected()) {
           peer.socket.send({ type: 'HEARTBEAT' });
         }
       }, 15000);
     }
 
-    function attemptReconnect() {
-      if (isReconnecting) return;
-      isReconnecting = true;
-
-      console.log('Attempting WebRTC P2P Reconnection...');
-      showToast('Connection interrupted. Reconnecting...', 'warning');
-
-      if (!isHost && currentRoomId) {
-        connectDataChannel(currentRoomId);
-      } else if (peer && !peer.destroyed) {
-        peer.reconnect();
-      }
-    }
-
     function manualReconnect() {
-      showToast('Initiating manual reconnection...', 'info');
       if (isHost) {
         if (peer && !peer.destroyed) peer.reconnect();
       } else {
-        if (currentRoomId) connectDataChannel(currentRoomId);
+        if (currentRoomId) connectToHost(currentRoomId);
       }
     }
 
-    // INCOMING DATA ROUTER
-    function handleIncomingData(data) {
+    // CENTRAL INCOMING DATA PACKET ROUTER
+    function handleIncomingDataPacket(data) {
       if (!data || !data.type) return;
-
-      // Update Heartbeat time on any incoming packet
-      lastPongTime = Date.now();
 
       switch (data.type) {
         case 'ping':
@@ -801,297 +1122,249 @@
           break;
 
         case 'pong':
-          // Heartbeat pong received successfully
           break;
 
         case 'text':
           appendTextMessage({
             id: data.id,
-            sender: 'peer',
+            senderName: data.senderName,
+            isSenderHost: data.isHost,
+            isYou: false,
             text: data.text,
-            timestamp: data.timestamp
+            timestamp: data.timestamp,
+            replyTo: data.replyTo
           });
           playNotificationSound();
-          if (activeConn && activeConn.open) activeConn.send({ type: 'ack', id: data.id });
+          broadcastToRoom({ type: 'ack', id: data.id }, null);
           break;
 
         case 'file':
           appendFileMessage({
             id: data.id,
-            sender: 'peer',
+            senderName: data.senderName,
+            isSenderHost: data.isHost,
+            isYou: false,
             name: data.name,
             fileType: data.fileType,
             size: data.size,
             isImage: data.isImage,
+            isAudio: data.isAudio,
             dataUrl: data.dataUrl,
             timestamp: data.timestamp
           });
           playNotificationSound();
-          if (activeConn && activeConn.open) activeConn.send({ type: 'ack', id: data.id });
+          broadcastToRoom({ type: 'ack', id: data.id }, null);
+          break;
+
+        case 'poll':
+          pollsStore[data.id] = data;
+          appendPollMessage(data, false);
+          playNotificationSound();
+          break;
+
+        case 'poll-vote':
+          handleIncomingPollVote(data);
+          break;
+
+        case 'viewport':
+          appendViewportMessage(data, false);
+          playNotificationSound();
+          break;
+
+        case 'reaction':
+          handleIncomingReaction(data);
           break;
 
         case 'typing':
-          toggleTypingIndicator(data.isTyping);
+          toggleTypingIndicator(data.isTyping, data.senderName);
           break;
 
         case 'ack':
           markMessageDelivered(data.id);
           break;
 
-        case 'call-declined':
-          showToast('Peer declined the voice call.', 'warning');
-          endVoiceCall(false);
-          break;
-
-        case 'call-ended':
-          showToast('Peer ended the voice call.', 'info');
-          endVoiceCall(false);
+        case 'user-join':
+          if (!isHost) appendSystemMessage(`${data.username} joined the room.`);
           break;
       }
     }
 
-    // VOICE CALL IMPLEMENTATION
-    async function initiateVoiceCall() {
-      if (!activeConn || !activeConn.open) {
-        showToast('Peer is not connected yet.', 'warning');
-        return;
-      }
+    // SMART AUTO-SCROLL IMPLEMENTATION
+    function appendAndScroll(element) {
+      if (waitingPlaceholder) waitingPlaceholder.classList.add('hidden');
 
-      showToast('Initiating audio call...', 'info');
+      const isNearBottom = messagesContainer.scrollHeight - messagesContainer.scrollTop - messagesContainer.clientHeight <= 100;
 
-      try {
-        localAudioStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-        
-        const targetPeerId = activeConn.peer;
-        mediaCall = peer.call(targetPeerId, localAudioStream);
+      messagesContainer.appendChild(element);
 
-        setupMediaCall(mediaCall);
-        showVoiceCallBar('Calling peer...');
-      } catch (err) {
-        console.error('Microphone access error:', err);
-        showToast('Microphone access denied or not found.', 'error');
-      }
-    }
-
-    async function acceptIncomingCall() {
-      document.getElementById('incoming-call-modal').classList.add('hidden');
-      if (!pendingIncomingCall) return;
-
-      try {
-        localAudioStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-        mediaCall = pendingIncomingCall;
-        pendingIncomingCall = null;
-
-        mediaCall.answer(localAudioStream);
-        setupMediaCall(mediaCall);
-        showVoiceCallBar('Call Active');
-      } catch (err) {
-        console.error('Microphone error:', err);
-        showToast('Microphone permission required to join call.', 'error');
-        declineIncomingCall();
-      }
-    }
-
-    function declineIncomingCall() {
-      document.getElementById('incoming-call-modal').classList.add('hidden');
-      if (pendingIncomingCall) {
-        pendingIncomingCall.close();
-        pendingIncomingCall = null;
-      }
-      if (activeConn && activeConn.open) {
-        activeConn.send({ type: 'call-declined' });
-      }
-    }
-
-    function setupMediaCall(call) {
-      call.on('stream', (remoteStream) => {
-        const audioEl = document.getElementById('remote-audio');
-        audioEl.srcObject = remoteStream;
-        audioEl.play().catch(e => console.log('Autoplay audio allowed:', e));
-
-        startCallTimer();
-        startAudioVisualizer(remoteStream);
-        document.getElementById('call-status-subtitle').textContent = 'Connected (128kbps Opus Direct)';
-      });
-
-      call.on('close', () => {
-        endVoiceCall(false);
-      });
-
-      call.on('error', (err) => {
-        console.error('Voice Call Error:', err);
-        showToast('Voice call error', 'error');
-        endVoiceCall(false);
-      });
-    }
-
-    function toggleMuteMic() {
-      if (!localAudioStream) return;
-      isMicMuted = !isMicMuted;
-      
-      localAudioStream.getAudioTracks().forEach(track => {
-        track.enabled = !isMicMuted;
-      });
-
-      const btn = document.getElementById('mute-mic-btn');
-      const icon = document.getElementById('mute-mic-icon');
-      const text = document.getElementById('mute-mic-text');
-
-      if (isMicMuted) {
-        btn.className = 'px-3 py-1.5 bg-rose-600 hover:bg-rose-500 text-white border border-rose-500 rounded-lg text-xs font-semibold flex items-center space-x-1.5 transition-colors';
-        icon.className = 'fa-solid fa-microphone-slash';
-        text.textContent = 'Muted';
+      if (isNearBottom) {
+        scrollToBottom(true);
       } else {
-        btn.className = 'px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-lg text-xs font-semibold flex items-center space-x-1.5 transition-colors';
-        icon.className = 'fa-solid fa-microphone';
-        text.textContent = 'Mute';
+        document.getElementById('new-msg-scroll-btn').classList.remove('hidden');
       }
     }
 
-    function endVoiceCall(notifyPeer = true) {
-      if (notifyPeer && activeConn && activeConn.open) {
-        activeConn.send({ type: 'call-ended' });
-      }
-
-      if (mediaCall) {
-        mediaCall.close();
-        mediaCall = null;
-      }
-
-      if (localAudioStream) {
-        localAudioStream.getTracks().forEach(track => track.stop());
-        localAudioStream = null;
-      }
-
-      stopCallTimer();
-      stopAudioVisualizer();
-
-      document.getElementById('voice-call-bar').classList.add('hidden');
-      document.getElementById('remote-audio').srcObject = null;
-      isMicMuted = false;
-      
-      showToast('Voice call ended.', 'info');
+    function scrollToBottom(smooth = false) {
+      messagesContainer.scrollTo({
+        top: messagesContainer.scrollHeight,
+        behavior: smooth ? 'smooth' : 'auto'
+      });
+      document.getElementById('new-msg-scroll-btn').classList.add('hidden');
     }
 
-    function showVoiceCallBar(title) {
-      document.getElementById('voice-call-bar').classList.remove('hidden');
-      document.getElementById('call-status-subtitle').textContent = title;
-    }
-
-    function startCallTimer() {
-      stopCallTimer();
-      callStartTime = Date.now();
-      const timerEl = document.getElementById('call-timer');
-      
-      callTimerInterval = setInterval(() => {
-        const elapsedSecs = Math.floor((Date.now() - callStartTime) / 1000);
-        const mins = String(Math.floor(elapsedSecs / 60)).padStart(2, '0');
-        const secs = String(elapsedSecs % 60).padStart(2, '0');
-        timerEl.textContent = `${mins}:${secs}`;
-      }, 1000);
-    }
-
-    function stopCallTimer() {
-      if (callTimerInterval) clearInterval(callTimerInterval);
-      document.getElementById('call-timer').textContent = '00:00';
-    }
-
-    function startAudioVisualizer(stream) {
-      try {
-        audioContext = new (window.AudioContext || window.webkitAudioContext)();
-        const source = audioContext.createMediaStreamSource(stream);
-        analyserNode = audioContext.createAnalyser();
-        analyserNode.fftSize = 32;
-        source.connect(analyserNode);
-
-        const container = document.getElementById('audio-vis-container');
-        container.classList.remove('hidden');
-        const bars = container.querySelectorAll('.vis-bar');
-        const dataArray = new Uint8Array(analyserNode.frequencyBinCount);
-
-        function render() {
-          analyserNode.getByteFrequencyData(dataArray);
-          bars.forEach((bar, idx) => {
-            const val = dataArray[idx * 2] || 0;
-            const heightPx = Math.max(4, Math.min(20, (val / 255) * 20));
-            bar.style.height = `${heightPx}px`;
-          });
-          visualizerAnimFrame = requestAnimationFrame(render);
+    function setupSmartScrollListener() {
+      messagesContainer.addEventListener('scroll', () => {
+        const isNearBottom = messagesContainer.scrollHeight - messagesContainer.scrollTop - messagesContainer.clientHeight <= 100;
+        if (isNearBottom) {
+          document.getElementById('new-msg-scroll-btn').classList.add('hidden');
         }
-        render();
-      } catch (e) {}
+      });
     }
 
-    function stopAudioVisualizer() {
-      if (visualizerAnimFrame) cancelAnimationFrame(visualizerAnimFrame);
-      if (audioContext) audioContext.close();
-      document.getElementById('audio-vis-container').classList.add('hidden');
-    }
-
-    // CHAT & FILE MESSAGING IMPLEMENTATION
+    // TEXT MESSAGING & RICH PARSING
     function handleSendText(e) {
       if (e) e.preventDefault();
       const text = chatInput.value.trim();
       if (!text) return;
 
-      if (!activeConn || activeConn.open === false) {
-        showToast('Cannot send: Peer is not connected yet.', 'warning');
-        return;
-      }
-
       const msgId = 'msg-' + Date.now();
-      const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      const now = new Date();
+      const timestamp = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      const fullDate = now.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' }) + ' at ' + timestamp;
 
-      activeConn.send({
+      const packet = {
         type: 'text',
         id: msgId,
+        senderName: myUsername,
+        isHost: isHost,
         text: text,
-        timestamp: timestamp
-      });
+        timestamp: fullDate,
+        replyTo: replyingTo
+      };
+
+      broadcastToRoom(packet, null);
 
       appendTextMessage({
         id: msgId,
-        sender: 'you',
+        senderName: myUsername,
+        isSenderHost: isHost,
+        isYou: true,
         text: text,
-        timestamp: timestamp
+        timestamp: fullDate,
+        replyTo: replyingTo
       });
 
       chatInput.value = '';
       chatInput.style.height = 'auto';
+      cancelReply();
       sendTypingSignal(false);
     }
 
-    function appendTextMessage({ id, sender, text, timestamp }) {
-      if (waitingPlaceholder) waitingPlaceholder.classList.add('hidden');
-
-      const isYou = sender === 'you';
+    function appendTextMessage({ id, senderName, isSenderHost, isYou, text, timestamp, replyTo }) {
       const wrapper = document.createElement('div');
-      wrapper.className = `flex flex-col ${isYou ? 'items-end' : 'items-start'} space-y-1 mb-3`;
+      wrapper.className = `flex flex-col ${isYou ? 'items-end' : 'items-start'} space-y-1 mb-3 chat-message-wrapper`;
       wrapper.id = id;
 
-      const bubble = document.createElement('div');
-      bubble.className = isYou
-        ? 'bg-indigo-600 text-white rounded-2xl rounded-tr-xs px-4 py-2.5 max-w-[85%] sm:max-w-md shadow-md text-sm break-words whitespace-pre-wrap'
-        : 'bg-slate-800 text-slate-100 rounded-2xl rounded-tl-xs px-4 py-2.5 max-w-[85%] sm:max-w-md border border-slate-700/80 shadow-md text-sm break-words whitespace-pre-wrap';
+      const nameBanner = document.createElement('div');
+      nameBanner.className = 'text-[11px] font-semibold text-slate-400 px-1 flex items-center space-x-1';
+      nameBanner.innerHTML = `
+        <span class="${isSenderHost ? 'rainbow-text' : 'text-slate-300'}">${escapeHtml(senderName)}</span>
+        ${isSenderHost ? '<span class="text-[9px] bg-amber-500/20 text-amber-300 border border-amber-500/30 px-1 rounded">HOST</span>' : ''}
+      `;
 
-      bubble.textContent = text;
+      const bubble = document.createElement('div');
+      bubble.className = `rounded-2xl px-4 py-2.5 max-w-[85%] sm:max-w-md shadow-md text-sm break-words whitespace-pre-wrap ${isYou ? 'chat-bubble-self rounded-tr-xs' : 'chat-bubble-peer rounded-tl-xs'} relative group transition-all`;
+      bubble.title = `Sent ${timestamp}`;
+
+      let replyHtml = '';
+      if (replyTo) {
+        replyHtml = `
+          <div class="bg-black/20 border-l-2 border-indigo-400 px-2 py-1 rounded text-xs mb-1.5 opacity-90">
+            <span class="font-bold text-indigo-300">${escapeHtml(replyTo.senderName)}</span>: <span class="italic truncate">${escapeHtml(replyTo.text)}</span>
+          </div>
+        `;
+      }
+
+      const parsedContent = parseLinksAndEmbeds(text);
+      bubble.innerHTML = replyHtml + parsedContent;
+
+      bubble.addEventListener('contextmenu', (e) => showContextMenu(e, id, text, senderName));
 
       const meta = document.createElement('div');
       meta.className = 'flex items-center space-x-1.5 text-[10px] text-slate-500 px-1';
       meta.innerHTML = `
-        <span>${isYou ? 'You' : 'Peer'}</span>
-        <span>•</span>
         <span>${timestamp}</span>
-        ${isYou ? `<span id="status-${id}" title="Sending..."><i class="fa-solid fa-check text-slate-600"></i></span>` : ''}
+        ${isYou ? `<span id="status-${id}" class="text-indigo-400">✓ Sent</span>` : ''}
       `;
 
+      const rxContainer = document.createElement('div');
+      rxContainer.id = `rx-${id}`;
+      rxContainer.className = 'flex flex-wrap gap-1 mt-1';
+
+      wrapper.appendChild(nameBanner);
       wrapper.appendChild(bubble);
+      wrapper.appendChild(rxContainer);
       wrapper.appendChild(meta);
-      messagesContainer.appendChild(wrapper);
-      scrollToBottom();
+
+      appendAndScroll(wrapper);
     }
 
-    // FILE ATTACHMENT CONFIRMATION WORKFLOW
+    // RICH LINK & VIDEO/AUDIO EMBEDDING
+    function parseLinksAndEmbeds(text) {
+      const urlRegex = /(https?:\/\/[^\s<]+)/g;
+      let ytEmbed = '';
+      let videoEmbed = '';
+      let audioEmbed = '';
+
+      const substitutedText = escapeHtml(text).replace(urlRegex, (url) => {
+        const ytMatch = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]+)/);
+        if (ytMatch && ytMatch[1]) {
+          ytEmbed += `
+            <div class="mt-2 rounded-lg overflow-hidden border border-black/20 aspect-video">
+              <iframe class="w-full h-full" src="https://www.youtube.com/embed/${ytMatch[1]}" frameborder="0" allowfullscreen></iframe>
+            </div>
+          `;
+        }
+
+        if (url.match(/\.(mp4|webm|ogg)(\?.*)?$/i)) {
+          videoEmbed += `
+            <video controls class="w-full max-h-60 rounded-lg mt-2 border border-black/20">
+              <source src="${url}">
+            </video>
+          `;
+        }
+
+        if (url.match(/\.(mp3|wav|m4a|aac)(\?.*)?$/i)) {
+          audioEmbed += `
+            <audio controls class="w-full h-9 rounded mt-2">
+              <source src="${url}">
+            </audio>
+          `;
+        }
+
+        return `<a href="${url}" target="_blank" rel="noopener noreferrer" class="underline text-indigo-300 hover:text-indigo-100 font-semibold break-all" onclick="event.stopPropagation()">${url}</a>`;
+      });
+
+      return substitutedText + ytEmbed + videoEmbed + audioEmbed;
+    }
+
+    // PLUS (+) ACTION POPOVER MENU
+    function togglePlusMenu(e) {
+      e.stopPropagation();
+      const menu = document.getElementById('plus-menu-popover');
+      menu.classList.toggle('hidden');
+    }
+
+    function triggerFileUploadOption() {
+      document.getElementById('plus-menu-popover').classList.add('hidden');
+      document.getElementById('file-input').click();
+    }
+
+    document.addEventListener('click', () => {
+      document.getElementById('plus-menu-popover').classList.add('hidden');
+    });
+
+    // FILE ATTACHMENTS & AUDIO PLAYER INTEGRATION
     function handleFileSelect(e) {
       const file = e.target.files[0];
       if (file) stageFileForConfirmation(file);
@@ -1099,11 +1372,6 @@
     }
 
     function stageFileForConfirmation(file) {
-      if (!activeConn || activeConn.open === false) {
-        showToast('Cannot send file: Peer not connected.', 'warning');
-        return;
-      }
-
       stagedFile = file;
       stagedFileDataUrl = null;
 
@@ -1146,64 +1414,77 @@
 
       const file = stagedFile;
       const isImage = file.type.startsWith('image/');
+      const isAudio = file.type.startsWith('audio/') || ['mp3','wav','ogg','m4a'].includes(file.name.split('.').pop().toLowerCase());
 
       if (isImage && stagedFileDataUrl) {
-        executeFileSend(file, stagedFileDataUrl);
+        executeFileSend(file, stagedFileDataUrl, isImage, isAudio);
         cancelStagedFile();
       } else {
-        showToast(`Preparing ${file.name}...`, 'info');
+        showToast(`Reading ${file.name}...`, 'info');
         const reader = new FileReader();
         reader.onload = (evt) => {
-          executeFileSend(file, evt.target.result);
+          executeFileSend(file, evt.target.result, isImage, isAudio);
           cancelStagedFile();
         };
         reader.readAsDataURL(file);
       }
     }
 
-    function executeFileSend(file, dataUrl) {
+    function executeFileSend(file, dataUrl, isImage, isAudio) {
       const msgId = 'file-' + Date.now();
-      const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-      const isImage = file.type.startsWith('image/');
+      const now = new Date();
+      const timestamp = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      const fullDate = now.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' }) + ' at ' + timestamp;
       const formattedSize = formatFileSize(file.size);
 
-      activeConn.send({
+      const packet = {
         type: 'file',
         id: msgId,
+        senderName: myUsername,
+        isHost: isHost,
         name: file.name,
         fileType: file.type,
         size: formattedSize,
         isImage: isImage,
+        isAudio: isAudio,
         dataUrl: dataUrl,
-        timestamp: timestamp
-      });
+        timestamp: fullDate
+      };
+
+      broadcastToRoom(packet, null);
 
       appendFileMessage({
         id: msgId,
-        sender: 'you',
+        senderName: myUsername,
+        isSenderHost: isHost,
+        isYou: true,
         name: file.name,
         fileType: file.type,
         size: formattedSize,
         isImage: isImage,
+        isAudio: isAudio,
         dataUrl: dataUrl,
-        timestamp: timestamp
+        timestamp: fullDate
       });
 
       showToast(`Sent ${file.name}`, 'success');
     }
 
-    function appendFileMessage({ id, sender, name, fileType, size, isImage, dataUrl, timestamp }) {
-      if (waitingPlaceholder) waitingPlaceholder.classList.add('hidden');
-
-      const isYou = sender === 'you';
+    function appendFileMessage({ id, senderName, isSenderHost, isYou, name, fileType, size, isImage, isAudio, dataUrl, timestamp }) {
       const wrapper = document.createElement('div');
-      wrapper.className = `flex flex-col ${isYou ? 'items-end' : 'items-start'} space-y-1 mb-3`;
+      wrapper.className = `flex flex-col ${isYou ? 'items-end' : 'items-start'} space-y-1 mb-3 chat-message-wrapper`;
       wrapper.id = id;
 
+      const nameBanner = document.createElement('div');
+      nameBanner.className = 'text-[11px] font-semibold text-slate-400 px-1 flex items-center space-x-1';
+      nameBanner.innerHTML = `
+        <span class="${isSenderHost ? 'rainbow-text' : 'text-slate-300'}">${escapeHtml(senderName)}</span>
+        ${isSenderHost ? '<span class="text-[9px] bg-amber-500/20 text-amber-300 border border-amber-500/30 px-1 rounded">HOST</span>' : ''}
+      `;
+
       const bubble = document.createElement('div');
-      bubble.className = isYou
-        ? 'bg-indigo-600 text-white rounded-2xl rounded-tr-xs p-3 max-w-[85%] sm:max-w-md shadow-md text-sm'
-        : 'bg-slate-800 text-slate-100 rounded-2xl rounded-tl-xs p-3 max-w-[85%] sm:max-w-md border border-slate-700/80 shadow-md text-sm';
+      bubble.className = `rounded-2xl p-3 max-w-[85%] sm:max-w-md shadow-md text-sm ${isYou ? 'chat-bubble-self rounded-tr-xs' : 'chat-bubble-peer rounded-tl-xs'}`;
+      bubble.title = `Sent ${timestamp}`;
 
       if (isImage) {
         bubble.innerHTML = `
@@ -1224,6 +1505,19 @@
             </div>
           </div>
         `;
+      } else if (isAudio) {
+        bubble.innerHTML = `
+          <div class="space-y-2 min-w-[220px]">
+            <div class="flex items-center space-x-2">
+              <i class="fa-solid fa-music text-amber-400 text-base"></i>
+              <span class="font-semibold text-xs truncate">${escapeHtml(name)}</span>
+            </div>
+            <audio controls class="w-full h-9 rounded">
+              <source src="${dataUrl}">
+            </audio>
+            <div class="text-[10px] opacity-75 text-right">${size}</div>
+          </div>
+        `;
       } else {
         const fileIcon = getIconForFileType(fileType, name);
         bubble.innerHTML = `
@@ -1235,45 +1529,395 @@
               <p class="font-semibold text-xs truncate">${escapeHtml(name)}</p>
               <p class="text-[10px] opacity-75">${size}</p>
             </div>
-            <a href="${dataUrl}" download="${escapeHtml(name)}" class="bg-black/20 hover:bg-black/40 text-white p-2 rounded-lg transition-colors shrink-0" title="Download File">
+            <a href="${dataUrl}" download="${escapeHtml(name)}" class="bg-black/20 hover:bg-black/40 text-white p-2 rounded-lg transition-colors shrink-0">
               <i class="fa-solid fa-download"></i>
             </a>
           </div>
         `;
       }
 
+      bubble.addEventListener('contextmenu', (e) => showContextMenu(e, id, name, senderName));
+
       const meta = document.createElement('div');
       meta.className = 'flex items-center space-x-1.5 text-[10px] text-slate-500 px-1';
       meta.innerHTML = `
-        <span>${isYou ? 'You' : 'Peer'}</span>
-        <span>•</span>
         <span>${timestamp}</span>
-        ${isYou ? `<span id="status-${id}" title="Delivered"><i class="fa-solid fa-check text-slate-600"></i></span>` : ''}
+        ${isYou ? `<span id="status-${id}" class="text-indigo-400">✓ Sent</span>` : ''}
+      `;
+
+      wrapper.appendChild(nameBanner);
+      wrapper.appendChild(bubble);
+      wrapper.appendChild(meta);
+
+      appendAndScroll(wrapper);
+    }
+
+    // POLL SYSTEM IMPLEMENTATION
+    function openPollModal() {
+      document.getElementById('plus-menu-popover').classList.add('hidden');
+      document.getElementById('poll-modal').classList.remove('hidden');
+    }
+
+    function closePollModal() {
+      document.getElementById('poll-modal').classList.add('hidden');
+    }
+
+    function addPollOptionInput() {
+      const container = document.getElementById('poll-options-container');
+      const count = container.querySelectorAll('input').length + 1;
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.className = 'poll-opt-input w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-100 outline-none';
+      input.placeholder = `Option ${count}`;
+      container.appendChild(input);
+    }
+
+    function submitPoll() {
+      const question = document.getElementById('poll-question-input').value.trim();
+      const optionInputs = document.querySelectorAll('.poll-opt-input');
+      const options = [];
+
+      optionInputs.forEach(input => {
+        const val = input.value.trim();
+        if (val) options.push({ text: val, votes: [] });
+      });
+
+      if (!question || options.length < 2) {
+        showToast('Provide a question and at least 2 options.', 'warning');
+        return;
+      }
+
+      const pollId = 'poll-' + Date.now();
+      const pollData = {
+        type: 'poll',
+        id: pollId,
+        question: question,
+        options: options,
+        senderName: myUsername,
+        isHost: isHost,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      };
+
+      pollsStore[pollId] = pollData;
+      broadcastToRoom(pollData, null);
+      appendPollMessage(pollData, true);
+      closePollModal();
+    }
+
+    function appendPollMessage(poll, isYou) {
+      const wrapper = document.createElement('div');
+      wrapper.className = `flex flex-col ${isYou ? 'items-end' : 'items-start'} space-y-1 mb-3 chat-message-wrapper`;
+      wrapper.id = poll.id;
+
+      const bubble = document.createElement('div');
+      bubble.className = `rounded-2xl p-4 max-w-[85%] sm:max-w-md w-full shadow-md bg-slate-900 border border-slate-800 space-y-3`;
+
+      bubble.innerHTML = `
+        <div class="flex items-center space-x-2 text-emerald-400 font-bold text-xs uppercase tracking-wider">
+          <i class="fa-solid fa-square-poll-vertical"></i>
+          <span>Poll by ${escapeHtml(poll.senderName)}</span>
+        </div>
+        <p class="font-bold text-sm text-slate-100">${escapeHtml(poll.question)}</p>
+        <div id="poll-opts-${poll.id}" class="space-y-2"></div>
       `;
 
       wrapper.appendChild(bubble);
-      wrapper.appendChild(meta);
-      messagesContainer.appendChild(wrapper);
-      scrollToBottom();
+      appendAndScroll(wrapper);
+
+      renderPollOptions(poll.id);
     }
 
-    function appendSystemMessage(text) {
-      if (waitingPlaceholder) waitingPlaceholder.classList.add('hidden');
-      const pill = document.createElement('div');
-      pill.className = 'flex justify-center my-3';
-      pill.innerHTML = `
-        <span class="bg-slate-800/80 border border-slate-700/50 text-slate-400 text-[11px] px-3 py-1 rounded-full text-center">
-          ${escapeHtml(text)}
-        </span>
+    function renderPollOptions(pollId) {
+      const poll = pollsStore[pollId];
+      if (!poll) return;
+
+      const container = document.getElementById(`poll-opts-${pollId}`);
+      if (!container) return;
+
+      container.innerHTML = '';
+      const totalVotes = poll.options.reduce((acc, opt) => acc + opt.votes.length, 0);
+
+      poll.options.forEach((opt, idx) => {
+        const count = opt.votes.length;
+        const pct = totalVotes > 0 ? Math.round((count / totalVotes) * 100) : 0;
+        const hasVoted = opt.votes.includes(myUsername);
+
+        const btn = document.createElement('button');
+        btn.onclick = () => voteInPoll(pollId, idx);
+        btn.className = `w-full text-left p-2.5 rounded-xl border relative overflow-hidden transition-all ${
+          hasVoted ? 'border-emerald-500 bg-emerald-950/30' : 'border-slate-800 bg-slate-950 hover:border-slate-700'
+        }`;
+
+        btn.innerHTML = `
+          <div class="absolute inset-0 bg-emerald-500/10 transition-all" style="width: ${pct}%"></div>
+          <div class="relative z-10 flex items-center justify-between text-xs">
+            <span class="font-semibold text-slate-200">${escapeHtml(opt.text)}</span>
+            <span class="text-[11px] font-mono text-slate-400">${pct}% (${count})</span>
+          </div>
+        `;
+        container.appendChild(btn);
+      });
+    }
+
+    function voteInPoll(pollId, optionIdx) {
+      const poll = pollsStore[pollId];
+      if (!poll) return;
+
+      poll.options.forEach(opt => {
+        const idx = opt.votes.indexOf(myUsername);
+        if (idx !== -1) opt.votes.splice(idx, 1);
+      });
+
+      poll.options[optionIdx].votes.push(myUsername);
+
+      broadcastToRoom({
+        type: 'poll-vote',
+        pollId: pollId,
+        optionIdx: optionIdx,
+        voterName: myUsername
+      }, null);
+
+      renderPollOptions(pollId);
+    }
+
+    function handleIncomingPollVote(data) {
+      const poll = pollsStore[data.pollId];
+      if (!poll) return;
+
+      poll.options.forEach(opt => {
+        const idx = opt.votes.indexOf(data.voterName);
+        if (idx !== -1) opt.votes.splice(idx, 1);
+      });
+
+      poll.options[data.optionIdx].votes.push(data.voterName);
+      renderPollOptions(data.pollId);
+    }
+
+    // VIEWPORT (CODE RUNNER) IMPLEMENTATION
+    function openViewportModal() {
+      document.getElementById('plus-menu-popover').classList.add('hidden');
+      document.getElementById('viewport-modal').classList.remove('hidden');
+    }
+
+    function closeViewportModal() {
+      document.getElementById('viewport-modal').classList.add('hidden');
+    }
+
+    function submitViewportCode() {
+      const code = document.getElementById('viewport-code-input').value;
+      if (!code.trim()) return;
+
+      const vpId = 'vp-' + Date.now();
+      const packet = {
+        type: 'viewport',
+        id: vpId,
+        code: code,
+        senderName: myUsername,
+        isHost: isHost,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      };
+
+      broadcastToRoom(packet, null);
+      appendViewportMessage(packet, true);
+      closeViewportModal();
+      document.getElementById('viewport-code-input').value = '';
+    }
+
+    function appendViewportMessage(vp, isYou) {
+      const wrapper = document.createElement('div');
+      wrapper.className = `flex flex-col ${isYou ? 'items-end' : 'items-start'} space-y-1 mb-3 chat-message-wrapper`;
+      wrapper.id = vp.id;
+
+      const bubble = document.createElement('div');
+      bubble.className = `rounded-2xl p-4 max-w-[90%] sm:max-w-lg w-full shadow-md bg-slate-900 border border-slate-800 space-y-3`;
+
+      bubble.innerHTML = `
+        <div class="flex items-center justify-between border-b border-slate-800 pb-2">
+          <div class="flex items-center space-x-2 text-amber-400 font-bold text-xs uppercase">
+            <i class="fa-solid fa-code"></i>
+            <span>Viewport Code Snippet</span>
+          </div>
+          <div class="flex items-center space-x-1.5">
+            <button onclick="toggleRunViewport('${vp.id}')" id="run-btn-${vp.id}" class="bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-semibold px-2.5 py-1 rounded-lg flex items-center space-x-1">
+              <i class="fa-solid fa-play"></i>
+              <span>Run</span>
+            </button>
+            <button onclick="openFullscreenViewport('${vp.id}')" class="bg-slate-800 hover:bg-slate-700 text-slate-200 text-[11px] px-2.5 py-1 rounded-lg">
+              <i class="fa-solid fa-expand"></i>
+            </button>
+          </div>
+        </div>
+
+        <div id="vp-code-box-${vp.id}" class="bg-slate-950 p-3 rounded-xl border border-slate-800 max-h-60 overflow-y-auto">
+          <pre class="text-xs font-mono text-emerald-400 whitespace-pre-wrap break-all">${escapeHtml(vp.code)}</pre>
+        </div>
+
+        <div id="vp-frame-box-${vp.id}" class="hidden h-64 w-full bg-white rounded-xl overflow-hidden border border-slate-800">
+          <iframe id="iframe-${vp.id}" class="w-full h-full border-0"></iframe>
+        </div>
       `;
-      messagesContainer.appendChild(pill);
-      scrollToBottom();
+
+      wrapper.appendChild(bubble);
+      wrapper.vpCode = vp.code;
+      appendAndScroll(wrapper);
     }
 
+    function toggleRunViewport(vpId) {
+      const codeBox = document.getElementById(`vp-code-box-${vpId}`);
+      const frameBox = document.getElementById(`vp-frame-box-${vpId}`);
+      const btn = document.getElementById(`run-btn-${vpId}`);
+      const wrapper = document.getElementById(vpId);
+
+      if (frameBox.classList.contains('hidden')) {
+        frameBox.classList.remove('hidden');
+        codeBox.classList.add('hidden');
+        btn.innerHTML = `<i class="fa-solid fa-code"></i> <span>Code</span>`;
+        btn.className = 'bg-slate-800 hover:bg-slate-700 text-slate-200 text-[11px] font-semibold px-2.5 py-1 rounded-lg flex items-center space-x-1';
+
+        const iframe = document.getElementById(`iframe-${vpId}`);
+        iframe.srcdoc = wrapper.vpCode;
+      } else {
+        frameBox.classList.add('hidden');
+        codeBox.classList.remove('hidden');
+        btn.innerHTML = `<i class="fa-solid fa-play"></i> <span>Run</span>`;
+        btn.className = 'bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-semibold px-2.5 py-1 rounded-lg flex items-center space-x-1';
+      }
+    }
+
+    function openFullscreenViewport(vpId) {
+      const wrapper = document.getElementById(vpId);
+      if (!wrapper) return;
+
+      const modal = document.getElementById('viewport-fullscreen-modal');
+      const iframe = document.getElementById('fullscreen-viewport-iframe');
+      iframe.srcdoc = wrapper.vpCode;
+      modal.classList.remove('hidden');
+    }
+
+    function closeFullscreenViewport() {
+      document.getElementById('viewport-fullscreen-modal').classList.add('hidden');
+    }
+
+    // RIGHT-CLICK CONTEXT MENU & REACTIONS
+    function showContextMenu(e, msgId, text, sender) {
+      e.preventDefault();
+      contextTargetMsgId = msgId;
+      contextTargetText = text;
+      contextTargetUser = sender;
+
+      const menu = document.getElementById('context-menu');
+      menu.style.left = `${Math.min(e.clientX, window.innerWidth - 200)}px`;
+      menu.style.top = `${Math.min(e.clientY, window.innerHeight - 180)}px`;
+      menu.classList.remove('hidden');
+    }
+
+    function setupContextMenuDismiss() {
+      document.addEventListener('click', () => {
+        document.getElementById('context-menu').classList.add('hidden');
+      });
+    }
+
+    function executeContextMenuCopy() {
+      if (contextTargetText) {
+        const temp = document.createElement('textarea');
+        temp.value = contextTargetText;
+        document.body.appendChild(temp);
+        temp.select();
+        document.execCommand('copy');
+        document.body.removeChild(temp);
+        showToast('Message copied!', 'info');
+      }
+    }
+
+    function executeContextMenuReply() {
+      replyingTo = {
+        id: contextTargetMsgId,
+        senderName: contextTargetUser,
+        text: contextTargetText
+      };
+
+      document.getElementById('reply-target-user').textContent = contextTargetUser;
+      document.getElementById('reply-target-text').textContent = `"${contextTargetText}"`;
+      document.getElementById('reply-preview-bar').classList.remove('hidden');
+      chatInput.focus();
+    }
+
+    function cancelReply() {
+      replyingTo = null;
+      document.getElementById('reply-preview-bar').classList.add('hidden');
+    }
+
+    function addEmojiReaction(emoji) {
+      if (!contextTargetMsgId) return;
+
+      const packet = {
+        type: 'reaction',
+        msgId: contextTargetMsgId,
+        emojiOrImg: emoji,
+        isCustomImg: false,
+        senderName: myUsername
+      };
+
+      broadcastToRoom(packet, null);
+      handleIncomingReaction(packet);
+    }
+
+    function triggerCustomImageReaction() {
+      document.getElementById('custom-reaction-file-input').click();
+    }
+
+    function handleCustomReactionUpload(e) {
+      const file = e.target.files[0];
+      if (!file || !contextTargetMsgId) return;
+
+      const reader = new FileReader();
+      reader.onload = (evt) => {
+        const packet = {
+          type: 'reaction',
+          msgId: contextTargetMsgId,
+          emojiOrImg: evt.target.result,
+          isCustomImg: true,
+          senderName: myUsername
+        };
+
+        broadcastToRoom(packet, null);
+        handleIncomingReaction(packet);
+      };
+      reader.readAsDataURL(file);
+      e.target.value = '';
+    }
+
+    function handleIncomingReaction(data) {
+      const rxContainer = document.getElementById(`rx-${data.msgId}`);
+      if (!rxContainer) return;
+
+      let pillId = `rxpill-${data.msgId}-${encodeURIComponent(data.emojiOrImg.substring(0, 20))}`;
+      let pill = document.getElementById(pillId);
+
+      if (!pill) {
+        pill = document.createElement('div');
+        pill.id = pillId;
+        pill.className = 'bg-slate-800/80 border border-slate-700/80 text-[11px] px-2 py-0.5 rounded-full flex items-center space-x-1 cursor-pointer hover:bg-slate-700';
+        pill.dataset.count = '1';
+
+        if (data.isCustomImg) {
+          pill.innerHTML = `<img src="${data.emojiOrImg}" class="w-3.5 h-3.5 object-cover rounded" /><span class="rx-count">1</span>`;
+        } else {
+          pill.innerHTML = `<span>${data.emojiOrImg}</span><span class="rx-count">1</span>`;
+        }
+        rxContainer.appendChild(pill);
+      } else {
+        let count = parseInt(pill.dataset.count || '1') + 1;
+        pill.dataset.count = count;
+        pill.querySelector('.rx-count').textContent = count;
+      }
+    }
+
+    // READ RECEIPTS
     function markMessageDelivered(msgId) {
-      const el = document.getElementById(`status-${msgId}`);
-      if (el) {
-        el.innerHTML = `<i class="fa-solid fa-check-double text-indigo-400" title="Delivered"></i>`;
+      const statusEl = document.getElementById(`status-${msgId}`);
+      if (statusEl) {
+        statusEl.innerHTML = `✓✓ Seen`;
       }
     }
 
@@ -1282,11 +1926,9 @@
       el.style.height = 'auto';
       el.style.height = Math.min(el.scrollHeight, 128) + 'px';
 
-      if (activeConn && activeConn.open) {
-        sendTypingSignal(true);
-        clearTimeout(typingTimer);
-        typingTimer = setTimeout(() => sendTypingSignal(false), 2000);
-      }
+      sendTypingSignal(true);
+      clearTimeout(typingTimer);
+      typingTimer = setTimeout(() => sendTypingSignal(false), 2000);
     }
 
     function handleKeyDown(e) {
@@ -1297,72 +1939,268 @@
     }
 
     function sendTypingSignal(isTyping) {
-      if (activeConn && activeConn.open) {
-        activeConn.send({ type: 'typing', isTyping: isTyping });
-      }
+      broadcastToRoom({ type: 'typing', isTyping: isTyping, senderName: myUsername }, null);
     }
 
-    function toggleTypingIndicator(show) {
+    function toggleTypingIndicator(show, name) {
       const indicator = document.getElementById('typing-indicator');
+      const text = document.getElementById('typing-text');
       if (show) {
+        text.textContent = `${name || 'Someone'} is typing...`;
         indicator.classList.remove('hidden');
-        scrollToBottom();
       } else {
         indicator.classList.add('hidden');
       }
     }
 
+    // SETTINGS & THEMES MODAL
+    function openSettingsModal() {
+      document.getElementById('settings-modal').classList.remove('hidden');
+    }
+
+    function closeSettingsModal() {
+      document.getElementById('settings-modal').classList.add('hidden');
+    }
+
+    function toggleGlassMode(enabled) {
+      if (enabled) {
+        messagesContainer.classList.add('glass-bubbles');
+      } else {
+        messagesContainer.classList.remove('glass-bubbles');
+      }
+    }
+
+    function updateBgColor(color) {
+      document.documentElement.style.setProperty('--bg-color', color);
+    }
+
+    function updateSelfBubbleColor(color) {
+      document.documentElement.style.setProperty('--self-bubble-bg', color);
+    }
+
+    function updatePeerBubbleColor(color) {
+      document.documentElement.style.setProperty('--peer-bubble-bg', color);
+    }
+
+    function handleWallpaperUpload(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      const imgEl = document.getElementById('bg-custom-image');
+      const videoEl = document.getElementById('bg-custom-video');
+      const overlay = document.getElementById('bg-overlay');
+      const url = URL.createObjectURL(file);
+
+      if (file.type.startsWith('video/')) {
+        imgEl.classList.add('hidden');
+        videoEl.src = url;
+        videoEl.classList.remove('hidden');
+      } else {
+        videoEl.classList.add('hidden');
+        imgEl.src = url;
+        imgEl.classList.remove('hidden');
+      }
+      overlay.classList.remove('hidden');
+      showToast('Custom wallpaper applied!', 'success');
+    }
+
+    function clearWallpaper() {
+      document.getElementById('bg-custom-image').classList.add('hidden');
+      document.getElementById('bg-custom-video').classList.add('hidden');
+      document.getElementById('bg-overlay').classList.add('hidden');
+      showToast('Wallpaper cleared', 'info');
+    }
+
+    // VOICE CALL SYSTEM
+    async function initiateVoiceCall() {
+      showToast('Initiating audio call...', 'info');
+      try {
+        localAudioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        
+        const targetId = isHost ? Object.keys(peersMap)[0] : currentRoomId;
+        if (!targetId) {
+          showToast('No peer connected to call', 'warning');
+          return;
+        }
+
+        mediaCall = peer.call(targetId, localAudioStream);
+        setupMediaCall(mediaCall);
+        showVoiceCallBar('Calling room...');
+      } catch (err) {
+        showToast('Microphone access required for voice call', 'error');
+      }
+    }
+
+    async function acceptIncomingCall() {
+      document.getElementById('incoming-call-modal').classList.add('hidden');
+      if (!pendingIncomingCall) return;
+
+      try {
+        localAudioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        mediaCall = pendingIncomingCall;
+        pendingIncomingCall = null;
+
+        mediaCall.answer(localAudioStream);
+        setupMediaCall(mediaCall);
+        showVoiceCallBar('Call Connected');
+      } catch (err) {
+        showToast('Microphone permission denied', 'error');
+        declineIncomingCall();
+      }
+    }
+
+    function declineIncomingCall() {
+      document.getElementById('incoming-call-modal').classList.add('hidden');
+      if (pendingIncomingCall) {
+        pendingIncomingCall.close();
+        pendingIncomingCall = null;
+      }
+    }
+
+    function setupMediaCall(call) {
+      call.on('stream', (remoteStream) => {
+        const audioEl = document.getElementById('remote-audio');
+        audioEl.srcObject = remoteStream;
+        audioEl.play().catch(e => console.log('Audio autoplay:', e));
+
+        startCallTimer();
+        startAudioVisualizer(remoteStream);
+      });
+
+      call.on('close', () => endVoiceCall(false));
+      call.on('error', () => endVoiceCall(false));
+    }
+
+    function toggleMuteMic() {
+      if (!localAudioStream) return;
+      isMicMuted = !isMicMuted;
+      localAudioStream.getAudioTracks().forEach(t => t.enabled = !isMicMuted);
+
+      const btn = document.getElementById('mute-mic-btn');
+      const icon = document.getElementById('mute-mic-icon');
+      const text = document.getElementById('mute-mic-text');
+
+      if (isMicMuted) {
+        btn.className = 'px-3 py-1.5 bg-rose-600 hover:bg-rose-500 text-white border border-rose-500 rounded-lg text-xs font-semibold flex items-center space-x-1.5';
+        icon.className = 'fa-solid fa-microphone-slash';
+        text.textContent = 'Muted';
+      } else {
+        btn.className = 'px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-lg text-xs font-semibold flex items-center space-x-1.5';
+        icon.className = 'fa-solid fa-microphone';
+        text.textContent = 'Mute';
+      }
+    }
+
+    function endVoiceCall(notify = true) {
+      if (mediaCall) {
+        mediaCall.close();
+        mediaCall = null;
+      }
+      if (localAudioStream) {
+        localAudioStream.getTracks().forEach(t => t.stop());
+        localAudioStream = null;
+      }
+      stopCallTimer();
+      stopAudioVisualizer();
+      document.getElementById('voice-call-bar').classList.add('hidden');
+      document.getElementById('remote-audio').srcObject = null;
+    }
+
+    function showVoiceCallBar(title) {
+      document.getElementById('voice-call-bar').classList.remove('hidden');
+      document.getElementById('call-status-subtitle').textContent = title;
+    }
+
+    function startCallTimer() {
+      stopCallTimer();
+      callStartTime = Date.now();
+      callTimerInterval = setInterval(() => {
+        const secs = Math.floor((Date.now() - callStartTime) / 1000);
+        const m = String(Math.floor(secs / 60)).padStart(2, '0');
+        const s = String(secs % 60).padStart(2, '0');
+        document.getElementById('call-timer').textContent = `${m}:${s}`;
+      }, 1000);
+    }
+
+    function stopCallTimer() {
+      if (callTimerInterval) clearInterval(callTimerInterval);
+      document.getElementById('call-timer').textContent = '00:00';
+    }
+
+    function startAudioVisualizer(stream) {
+      try {
+        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        const source = audioContext.createMediaStreamSource(stream);
+        analyserNode = audioContext.createAnalyser();
+        analyserNode.fftSize = 32;
+        source.connect(analyserNode);
+
+        const container = document.getElementById('audio-vis-container');
+        container.classList.remove('hidden');
+        const bars = container.querySelectorAll('.vis-bar');
+        const dataArray = new Uint8Array(analyserNode.frequencyBinCount);
+
+        function render() {
+          analyserNode.getByteFrequencyData(dataArray);
+          bars.forEach((bar, idx) => {
+            const val = dataArray[idx * 2] || 0;
+            bar.style.height = `${Math.max(4, Math.min(20, (val / 255) * 20))}px`;
+          });
+          visualizerAnimFrame = requestAnimationFrame(render);
+        }
+        render();
+      } catch (e) {}
+    }
+
+    function stopAudioVisualizer() {
+      if (visualizerAnimFrame) cancelAnimationFrame(visualizerAnimFrame);
+      if (audioContext) audioContext.close();
+      document.getElementById('audio-vis-container').classList.add('hidden');
+    }
+
     // DRAG AND DROP SETUP
     function setupDragAndDrop() {
-      const dropZone = document.body;
-
-      ['dragenter', 'dragover'].forEach(eventName => {
-        dropZone.addEventListener(eventName, (e) => {
+      const zone = document.body;
+      ['dragenter', 'dragover'].forEach(name => {
+        zone.addEventListener(name, (e) => {
           e.preventDefault();
-          e.stopPropagation();
-          if (activeConn && activeConn.open) {
-            dropOverlay.classList.remove('opacity-0', 'pointer-events-none');
-          }
-        }, false);
+          dropOverlay.classList.remove('opacity-0', 'pointer-events-none');
+        });
       });
 
-      ['dragleave', 'drop'].forEach(eventName => {
-        dropZone.addEventListener(eventName, (e) => {
+      ['dragleave', 'drop'].forEach(name => {
+        zone.addEventListener(name, (e) => {
           e.preventDefault();
-          e.stopPropagation();
           dropOverlay.classList.add('opacity-0', 'pointer-events-none');
-        }, false);
+        });
       });
 
-      dropZone.addEventListener('drop', (e) => {
-        const dt = e.dataTransfer;
-        const files = dt.files;
-        if (files && files.length > 0) {
-          stageFileForConfirmation(files[0]);
-        }
+      zone.addEventListener('drop', (e) => {
+        const files = e.dataTransfer.files;
+        if (files && files.length > 0) stageFileForConfirmation(files[0]);
       });
     }
 
-    // UI & MODAL UTILITIES
+    // GENERAL UI HELPERS
     function switchToChatView() {
       lobbyView.classList.add('hidden');
       chatView.classList.remove('hidden');
       chatRoomIdDisplay.textContent = currentRoomId;
-      leaveBtn.classList.remove('hidden');
       headerShareBtn.classList.remove('hidden');
+      voiceCallBtn.classList.remove('hidden');
+      leaveBtn.classList.remove('hidden');
     }
 
     function confirmLeaveRoom() {
-      if (confirm('Are you sure you want to leave this room?')) {
+      if (confirm('Leave current room?')) {
         if (mediaCall) endVoiceCall(false);
         stopHeartbeat();
-        
-        if (activeConn) activeConn.close();
         if (peer) peer.destroy();
-        
+
         window.location.hash = '';
-        activeConn = null;
         peer = null;
+        peersMap = {};
+        activeConn = null;
         currentRoomId = null;
 
         chatView.classList.add('hidden');
@@ -1381,19 +2219,17 @@
 
     function openShareModal() {
       if (!currentRoomId) return;
+      const url = `${window.location.origin}${window.location.pathname}#${currentRoomId}`;
+      document.getElementById('share-url-input').value = url;
 
-      const shareUrl = `${window.location.origin}${window.location.pathname}#${currentRoomId}`;
-      document.getElementById('share-url-input').value = shareUrl;
-
-      const qrContainer = document.getElementById('qrcode');
-      qrContainer.innerHTML = '';
-      new QRCode(qrContainer, {
-        text: shareUrl,
+      const qr = document.getElementById('qrcode');
+      qr.innerHTML = '';
+      new QRCode(qr, {
+        text: url,
         width: 180,
         height: 180,
         colorDark: "#0f172a",
-        colorLight: "#ffffff",
-        correctLevel: QRCode.CorrectLevel.M
+        colorLight: "#ffffff"
       });
 
       document.getElementById('share-modal').classList.remove('hidden');
@@ -1403,12 +2239,11 @@
       document.getElementById('share-modal').classList.add('hidden');
     }
 
-    function openImageModal(dataUrl, filename) {
-      const imgEl = document.getElementById('modal-image-element');
-      const downloadBtn = document.getElementById('modal-download-btn');
-      imgEl.src = dataUrl;
-      downloadBtn.href = dataUrl;
-      downloadBtn.download = filename;
+    function openImageModal(url, name) {
+      document.getElementById('modal-image-element').src = url;
+      const btn = document.getElementById('modal-download-btn');
+      btn.href = url;
+      btn.download = name;
       document.getElementById('image-modal').classList.remove('hidden');
     }
 
@@ -1417,48 +2252,39 @@
     }
 
     function copyRoomLink() {
-      const input = document.getElementById('share-url-input');
-      const shareUrl = input.value || `${window.location.origin}${window.location.pathname}#${currentRoomId}`;
-      
-      const tempInput = document.createElement('input');
-      tempInput.value = shareUrl;
-      document.body.appendChild(tempInput);
-      tempInput.select();
-      try {
-        document.execCommand('copy');
-        showToast('Share link copied to clipboard!', 'success');
-      } catch (err) {
-        showToast('Failed to copy link automatically.', 'error');
-      }
-      document.body.removeChild(tempInput);
+      const url = `${window.location.origin}${window.location.pathname}#${currentRoomId}`;
+      const temp = document.createElement('input');
+      temp.value = url;
+      document.body.appendChild(temp);
+      temp.select();
+      document.execCommand('copy');
+      document.body.removeChild(temp);
+      showToast('Room link copied to clipboard!', 'success');
     }
 
-    function showToast(message, type = 'info') {
+    function showToast(msg, type = 'info') {
       const container = document.getElementById('toast-container');
       const toast = document.createElement('div');
       
-      let borderClass = 'border-slate-700 bg-slate-900 text-slate-200';
+      let border = 'border-slate-700 bg-slate-900 text-slate-200';
       let icon = 'fa-circle-info text-indigo-400';
 
       if (type === 'success') {
-        borderClass = 'border-emerald-500/50 bg-slate-900 text-emerald-200';
+        border = 'border-emerald-500/50 bg-slate-900 text-emerald-200';
         icon = 'fa-circle-check text-emerald-400';
       } else if (type === 'error') {
-        borderClass = 'border-rose-500/50 bg-slate-900 text-rose-200';
+        border = 'border-rose-500/50 bg-slate-900 text-rose-200';
         icon = 'fa-triangle-exclamation text-rose-400';
       } else if (type === 'warning') {
-        borderClass = 'border-amber-500/50 bg-slate-900 text-amber-200';
+        border = 'border-amber-500/50 bg-slate-900 text-amber-200';
         icon = 'fa-circle-exclamation text-amber-400';
       }
 
-      toast.className = `flex items-center space-x-2 border px-4 py-2.5 rounded-xl shadow-xl text-xs font-medium backdrop-blur-md transition-all transform translate-y-2 opacity-0 pointer-events-auto ${borderClass}`;
-      toast.innerHTML = `<i class="fa-solid ${icon}"></i><span>${escapeHtml(message)}</span>`;
+      toast.className = `flex items-center space-x-2 border px-4 py-2.5 rounded-xl shadow-xl text-xs font-medium backdrop-blur-md transition-all transform translate-y-2 opacity-0 pointer-events-auto ${border}`;
+      toast.innerHTML = `<i class="fa-solid ${icon}"></i><span>${escapeHtml(msg)}</span>`;
 
       container.appendChild(toast);
-
-      requestAnimationFrame(() => {
-        toast.classList.remove('translate-y-2', 'opacity-0');
-      });
+      requestAnimationFrame(() => toast.classList.remove('translate-y-2', 'opacity-0'));
 
       setTimeout(() => {
         toast.classList.add('opacity-0', 'translate-y-2');
@@ -1466,12 +2292,16 @@
       }, 3000);
     }
 
-    function scrollToBottom() {
-      messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    function appendSystemMessage(txt) {
+      if (waitingPlaceholder) waitingPlaceholder.classList.add('hidden');
+      const pill = document.createElement('div');
+      pill.className = 'flex justify-center my-3';
+      pill.innerHTML = `<span class="bg-slate-800/80 border border-slate-700/50 text-slate-400 text-[11px] px-3 py-1 rounded-full text-center">${escapeHtml(txt)}</span>`;
+      appendAndScroll(pill);
     }
 
     function formatFileSize(bytes) {
-      if (!bytes || bytes === 0) return '0 B';
+      if (!bytes) return '0 B';
       const k = 1024;
       const sizes = ['B', 'KB', 'MB', 'GB'];
       const i = Math.floor(Math.log(bytes) / Math.log(k));
@@ -1481,30 +2311,20 @@
     function getIconForFileType(mimeType, filename) {
       if (!mimeType) mimeType = '';
       const ext = filename.split('.').pop().toLowerCase();
-
       if (mimeType.startsWith('image/')) return 'fa-solid fa-file-image text-emerald-400';
       if (mimeType.startsWith('video/')) return 'fa-solid fa-file-video text-purple-400';
       if (mimeType.startsWith('audio/')) return 'fa-solid fa-file-audio text-amber-400';
       if (mimeType.includes('pdf') || ext === 'pdf') return 'fa-solid fa-file-pdf text-rose-400';
-      if (mimeType.includes('zip') || mimeType.includes('compressed') || ['zip','rar','7z','tar','gz'].includes(ext)) {
-        return 'fa-solid fa-file-zipper text-indigo-400';
-      }
-      if (['js','html','css','py','java','cpp','json','ts'].includes(ext)) return 'fa-solid fa-file-code text-cyan-400';
-      
+      if (['zip','rar','7z'].includes(ext)) return 'fa-solid fa-file-zipper text-indigo-400';
+      if (['js','html','css','py'].includes(ext)) return 'fa-solid fa-file-code text-cyan-400';
       return 'fa-solid fa-file text-slate-400';
     }
 
     function escapeHtml(str) {
       if (!str) return '';
-      return str.replace(/[&<>"']/g, function(m) {
-        return {
-          '&': '&amp;',
-          '<': '&lt;',
-          '>': '&gt;',
-          '"': '&quot;',
-          "'": '&#039;'
-        }[m];
-      });
+      return str.replace(/[&<>"']/g, m => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;'
+      }[m]));
     }
   </script>
 </body>
