@@ -1,0 +1,1037 @@
+<!DOCTYPE html>
+<html lang="en" class="dark h-full">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BeamP2P - Serverless WebRTC Chat & File Sharing</title>
+  
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#eep2ff',
+              100: '#e0e7ff',
+              500: '#6366f1',
+              600: '#4f46e5',
+              700: '#4338ca',
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- Font Awesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+  
+  <!-- PeerJS CDN -->
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+  
+  <!-- QRCode.js CDN -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+
+  <style>
+    /* Custom Scrollbar for Chat UI */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: rgba(15, 23, 42, 0.6);
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(51, 65, 85, 0.8);
+      border-radius: 9999px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(71, 85, 105, 1);
+    }
+
+    /* Pulsing animations */
+    @keyframes pulse-dot {
+      0%, 100% { transform: scale(1); opacity: 1; }
+      50% { transform: scale(1.25); opacity: 0.7; }
+    }
+    .animate-pulse-dot {
+      animation: pulse-dot 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    }
+
+    /* Drag and drop overlay transition */
+    #drop-overlay {
+      transition: opacity 0.2s ease-in-out, visibility 0.2s;
+    }
+
+    /* Image Modal backdrop blur */
+    .modal-backdrop {
+      backdrop-filter: blur(8px);
+    }
+  </style>
+</head>
+
+<body class="bg-slate-950 text-slate-100 h-full flex flex-col font-sans antialiased overflow-hidden select-none">
+
+  <!-- TOP HEADER -->
+  <header class="bg-slate-900/90 border-b border-slate-800 px-4 py-3 flex items-center justify-between shrink-0 z-20 backdrop-blur-md">
+    <div class="flex items-center space-x-3">
+      <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-600 to-violet-500 flex items-center justify-center shadow-lg shadow-indigo-500/20">
+        <i class="fa-solid font-bold fa-bolt text-white text-lg"></i>
+      </div>
+      <div>
+        <h1 class="font-bold text-slate-100 tracking-tight text-base leading-tight flex items-center gap-2">
+          BeamP2P
+          <span class="text-[10px] bg-slate-800 text-slate-400 border border-slate-700 px-1.5 py-0.5 rounded font-mono uppercase">Serverless</span>
+        </h1>
+        <p class="text-xs text-slate-400 hidden sm:block">Direct Peer-to-Peer Encrypted Transfer</p>
+      </div>
+    </div>
+
+    <!-- Right Controls / Status -->
+    <div class="flex items-center space-x-2 sm:space-x-3">
+      <!-- Connection Status Badge -->
+      <div id="status-badge" class="flex items-center space-x-2 bg-slate-800/80 border border-slate-700/60 px-3 py-1.5 rounded-full text-xs font-medium text-slate-300">
+        <span id="status-dot" class="w-2.5 h-2.5 rounded-full bg-slate-500"></span>
+        <span id="status-text">Disconnected</span>
+      </div>
+
+      <!-- Sound Toggle Button -->
+      <button id="sound-btn" onclick="toggleSound()" class="p-2 text-slate-400 hover:text-slate-100 hover:bg-slate-800 rounded-lg transition-colors" title="Toggle Sound Notifications">
+        <i id="sound-icon" class="fa-solid fa-volume-high"></i>
+      </button>
+
+      <!-- Room Info / Share Button (Shown when room active) -->
+      <button id="header-share-btn" onclick="openShareModal()" class="hidden sm:flex items-center space-x-1.5 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-400 border border-indigo-500/30 px-3 py-1.5 rounded-lg text-xs font-medium transition-all">
+        <i class="fa-solid fa-qrcode"></i>
+        <span>Room Link</span>
+      </button>
+
+      <!-- Leave / New Room Button -->
+      <button id="leave-btn" onclick="confirmLeaveRoom()" class="hidden p-2 text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors" title="Leave Chat">
+        <i class="fa-solid fa-right-from-bracket"></i>
+      </button>
+    </div>
+  </header>
+
+  <!-- MAIN CONTAINER -->
+  <main class="flex-1 relative flex flex-col overflow-hidden">
+
+    <!-- LOBBY VIEW (Shown before joining/hosting) -->
+    <div id="lobby-view" class="flex-1 flex items-center justify-center p-4 overflow-y-auto">
+      <div class="max-w-md w-full space-y-6">
+        
+        <!-- Hero Title -->
+        <div class="text-center space-y-2">
+          <div class="inline-flex p-3 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 mb-2">
+            <i class="fa-solid fa-network-wired text-3xl"></i>
+          </div>
+          <h2 class="text-2xl font-extrabold text-white tracking-tight sm:text-3xl">Direct WebRTC Chat</h2>
+          <p class="text-slate-400 text-sm">
+            No servers. No data tracking. Pure peer-to-peer messaging and file transfers direct from browser to browser.
+          </p>
+        </div>
+
+        <!-- Action Cards -->
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-5 shadow-2xl">
+          
+          <!-- Host Room Button -->
+          <div>
+            <button onclick="hostRoom()" class="w-full bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white font-semibold py-3 px-4 rounded-xl shadow-lg shadow-indigo-600/25 flex items-center justify-center space-x-2 transition-all transform active:scale-[0.98]">
+              <i class="fa-solid fa-plus-circle text-lg"></i>
+              <span>Host a New Room</span>
+            </button>
+            <p class="text-[11px] text-slate-500 text-center mt-2">Generates a unique link & QR code to share with your peer.</p>
+          </div>
+
+          <div class="relative flex py-1 items-center">
+            <div class="flex-grow border-t border-slate-800"></div>
+            <span class="flex-shrink mx-3 text-slate-500 text-xs uppercase tracking-wider font-semibold">Or Join Existing</span>
+            <div class="flex-grow border-t border-slate-800"></div>
+          </div>
+
+          <!-- Join Form -->
+          <form onsubmit="handleManualJoin(event)" class="space-y-3">
+            <div>
+              <label for="room-input" class="block text-xs font-medium text-slate-400 mb-1">Room ID or Full Link</label>
+              <div class="relative">
+                <input type="text" id="room-input" placeholder="e.g. beam-x9a2k or pasted link" 
+                  class="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-xl px-3.5 py-2.5 text-sm text-slate-100 placeholder-slate-600 outline-none transition-all pr-10" />
+                <i class="fa-solid fa-key absolute right-3.5 top-3 text-slate-600 text-xs"></i>
+              </div>
+            </div>
+            <button type="submit" class="w-full bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold py-2.5 px-4 rounded-xl border border-slate-700/60 flex items-center justify-center space-x-2 transition-all active:scale-[0.98]">
+              <i class="fa-solid fa-arrow-right-to-bracket text-indigo-400"></i>
+              <span>Join Room</span>
+            </button>
+          </form>
+
+        </div>
+
+        <!-- Privacy & Tech Pill -->
+        <div class="grid grid-cols-3 gap-2 text-center text-[11px] text-slate-500">
+          <div class="bg-slate-900/50 border border-slate-800/80 p-2 rounded-lg">
+            <i class="fa-solid fa-shield-halved text-indigo-400 block text-sm mb-1"></i>
+            <span>E2E Direct</span>
+          </div>
+          <div class="bg-slate-900/50 border border-slate-800/80 p-2 rounded-lg">
+            <i class="fa-solid fa-server text-indigo-400 block text-sm mb-1"></i>
+            <span>Zero Server</span>
+          </div>
+          <div class="bg-slate-900/50 border border-slate-800/80 p-2 rounded-lg">
+            <i class="fa-solid fa-infinity text-indigo-400 block text-sm mb-1"></i>
+            <span>Unlimited Sharing</span>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- CHAT VIEW (Shown when in a room) -->
+    <div id="chat-view" class="hidden flex-1 flex flex-col h-full relative">
+      
+      <!-- Chat Banner Notice / Peer Bar -->
+      <div class="bg-slate-900/60 border-b border-slate-800/80 px-4 py-2 flex items-center justify-between text-xs shrink-0">
+        <div class="flex items-center space-x-2 truncate">
+          <span class="text-slate-400">Room:</span>
+          <span id="chat-room-id-display" class="font-mono font-bold text-indigo-400 bg-indigo-950/60 border border-indigo-800/40 px-2 py-0.5 rounded select-all">---</span>
+        </div>
+        <div class="flex items-center space-x-2">
+          <button onclick="copyRoomLink()" class="text-slate-400 hover:text-indigo-400 flex items-center space-x-1 px-2 py-1 rounded bg-slate-800/60 hover:bg-slate-800 transition-colors">
+            <i class="fa-regular fa-copy"></i>
+            <span class="hidden sm:inline">Copy Share Link</span>
+          </button>
+          <button onclick="openShareModal()" class="text-slate-400 hover:text-indigo-400 flex items-center space-x-1 px-2 py-1 rounded bg-slate-800/60 hover:bg-slate-800 transition-colors">
+            <i class="fa-solid fa-qrcode"></i>
+            <span>QR Code</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Messages Area -->
+      <div id="messages-container" class="flex-1 overflow-y-auto p-4 space-y-4">
+        <!-- Waiting placeholder if alone -->
+        <div id="waiting-placeholder" class="h-full flex flex-col items-center justify-center text-center p-6 space-y-4">
+          <div class="w-16 h-16 rounded-full bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 text-2xl animate-bounce">
+            <i class="fa-solid fa-user-clock"></i>
+          </div>
+          <div class="max-w-xs">
+            <h3 class="font-bold text-slate-200 text-base">Waiting for peer to join...</h3>
+            <p class="text-slate-400 text-xs mt-1">Send the room link or QR code to someone. Once they open it, messaging will activate automatically.</p>
+          </div>
+          <button onclick="openShareModal()" class="bg-indigo-600 hover:bg-indigo-500 text-white font-medium px-4 py-2 rounded-xl text-xs flex items-center space-x-2 shadow-lg shadow-indigo-600/20">
+            <i class="fa-solid fa-share-nodes"></i>
+            <span>Share Room Link</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Typing Indicator -->
+      <div id="typing-indicator" class="hidden px-4 py-1 text-xs text-slate-400 flex items-center space-x-2 shrink-0">
+        <span class="inline-flex space-x-1">
+          <span class="w-1.5 h-1.5 bg-indigo-400 rounded-full animate-bounce" style="animation-delay: 0ms"></span>
+          <span class="w-1.5 h-1.5 bg-indigo-400 rounded-full animate-bounce" style="animation-delay: 150ms"></span>
+          <span class="w-1.5 h-1.5 bg-indigo-400 rounded-full animate-bounce" style="animation-delay: 300ms"></span>
+        </span>
+        <span id="typing-text">Peer is typing...</span>
+      </div>
+
+      <!-- Chat Input Section -->
+      <div class="p-3 bg-slate-900 border-t border-slate-800 shrink-0">
+        <form onsubmit="handleSendText(event)" class="flex items-end space-x-2">
+          
+          <!-- Attachment Button -->
+          <label class="p-2.5 text-slate-400 hover:text-indigo-400 hover:bg-slate-800 rounded-xl cursor-pointer transition-colors shrink-0" title="Attach Image or File">
+            <i class="fa-solid fa-paperclip text-lg"></i>
+            <input type="file" id="file-input" class="hidden" onchange="handleFileSelect(event)" />
+          </label>
+
+          <!-- Text Field -->
+          <div class="flex-1 relative">
+            <textarea id="chat-input" rows="1" placeholder="Type a message or drag & drop files here..." 
+              oninput="handleInputChange(this)" onkeydown="handleKeyDown(event)"
+              class="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-xl px-3.5 py-2.5 text-sm text-slate-100 placeholder-slate-500 outline-none resize-none max-h-32 min-h-[42px] transition-all"></textarea>
+          </div>
+
+          <!-- Send Button -->
+          <button type="submit" id="send-btn" class="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed text-white p-2.5 rounded-xl transition-all shrink-0 flex items-center justify-center w-11 h-11">
+            <i class="fa-solid fa-paper-plane text-sm"></i>
+          </button>
+        </form>
+      </div>
+
+      <!-- Drag & Drop Overlay Zone -->
+      <div id="drop-overlay" class="absolute inset-0 bg-slate-950/90 border-4 border-dashed border-indigo-500 rounded-xl flex flex-col items-center justify-center z-30 opacity-0 pointer-events-none transition-opacity">
+        <i class="fa-solid fa-cloud-arrow-up text-5xl text-indigo-400 mb-3 animate-bounce"></i>
+        <p class="text-slate-200 font-bold text-lg">Drop file to send directly to peer</p>
+        <p class="text-slate-400 text-xs mt-1">Supports Images, Documents, Videos, Archives & more</p>
+      </div>
+
+    </div>
+
+  </main>
+
+  <!-- MODAL: ROOM SHARE & QR CODE -->
+  <div id="share-modal" class="fixed inset-0 bg-slate-950/80 modal-backdrop z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-sm w-full p-6 space-y-5 relative shadow-2xl">
+      
+      <button onclick="closeShareModal()" class="absolute top-4 right-4 text-slate-400 hover:text-slate-200">
+        <i class="fa-solid fa-xmark text-lg"></i>
+      </button>
+
+      <div class="text-center space-y-1">
+        <h3 class="text-lg font-bold text-white">Invite Your Peer</h3>
+        <p class="text-slate-400 text-xs">Scan QR code or send link to start chatting</p>
+      </div>
+
+      <!-- QR Container -->
+      <div class="bg-white p-4 rounded-xl flex items-center justify-center shadow-inner w-48 h-48 mx-auto">
+        <div id="qrcode"></div>
+      </div>
+
+      <!-- Room Code Box -->
+      <div class="space-y-2">
+        <label class="block text-xs text-slate-400 font-medium">Direct Share Link</label>
+        <div class="flex items-center space-x-2">
+          <input type="text" id="share-url-input" readonly class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs font-mono text-slate-300 outline-none select-all" />
+          <button onclick="copyRoomLink()" class="bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium px-3 py-2 rounded-lg shrink-0 transition-colors">
+            Copy
+          </button>
+        </div>
+      </div>
+
+      <p class="text-[11px] text-slate-500 text-center">Connection will establish automatically once peer opens the link.</p>
+    </div>
+  </div>
+
+  <!-- MODAL: FULL IMAGE PREVIEW -->
+  <div id="image-modal" class="fixed inset-0 bg-slate-950/90 modal-backdrop z-50 flex items-center justify-center p-4 hidden">
+    <div class="relative max-w-4xl max-h-full flex flex-col items-center">
+      <button onclick="closeImageModal()" class="absolute -top-10 right-0 text-slate-300 hover:text-white text-xl">
+        <i class="fa-solid fa-xmark"></i> Close
+      </button>
+      <img id="modal-image-element" src="" class="max-h-[80vh] max-w-full rounded-lg object-contain shadow-2xl border border-slate-800" />
+      <div class="mt-4 flex space-x-3">
+        <a id="modal-download-btn" href="#" download="" class="bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold px-4 py-2 rounded-lg flex items-center space-x-2 shadow-lg">
+          <i class="fa-solid fa-download"></i>
+          <span>Download Original Image</span>
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <!-- ALERT NOTIFICATION BANNER CONTAINER -->
+  <div id="toast-container" class="fixed bottom-4 right-4 z-50 space-y-2 pointer-events-none"></div>
+
+
+  <!-- APPLICATION LOGIC -->
+  <script>
+    // Global State
+    let peer = null;
+    let activeConn = null;
+    let myPeerId = null;
+    let currentRoomId = null;
+    let isHost = false;
+    let soundEnabled = true;
+    let typingTimer = null;
+    let isPeerTyping = false;
+
+    // WebRTC Peer Configuration (Google Public STUN Servers)
+    const peerConfig = {
+      config: {
+        iceServers: [
+          { urls: 'stun:stun.l.google.com:19302' },
+          { urls: 'stun:stun1.l.google.com:19302' },
+          { urls: 'stun:stun2.l.google.com:19302' }
+        ]
+      },
+      debug: 1
+    };
+
+    // DOM Elements
+    const lobbyView = document.getElementById('lobby-view');
+    const chatView = document.getElementById('chat-view');
+    const statusDot = document.getElementById('status-dot');
+    const statusText = document.getElementById('status-text');
+    const messagesContainer = document.getElementById('messages-container');
+    const chatInput = document.getElementById('chat-input');
+    const waitingPlaceholder = document.getElementById('waiting-placeholder');
+    const headerShareBtn = document.getElementById('header-share-btn');
+    const leaveBtn = document.getElementById('leave-btn');
+    const chatRoomIdDisplay = document.getElementById('chat-room-id-display');
+    const dropOverlay = document.getElementById('drop-overlay');
+
+    // INITIALIZATION ON PAGE LOAD
+    window.addEventListener('DOMContentLoaded', () => {
+      // Setup Drag & Drop File Listeners
+      setupDragAndDrop();
+
+      // Auto-join if Hash present in URL
+      const hash = window.location.hash.replace('#', '').trim();
+      if (hash) {
+        showToast('Found room link! Connecting...', 'info');
+        joinRoom(hash);
+      }
+    });
+
+    // Web Audio Synthesizer for Message Alerts
+    function playNotificationSound() {
+      if (!soundEnabled) return;
+      try {
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(587.33, audioCtx.currentTime); // D5
+        osc.frequency.exponentialRampToValueAtTime(880, audioCtx.currentTime + 0.12); // A5
+        gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.25);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.25);
+      } catch (e) {
+        console.error('Audio playback error', e);
+      }
+    }
+
+    function toggleSound() {
+      soundEnabled = !soundEnabled;
+      const icon = document.getElementById('sound-icon');
+      if (soundEnabled) {
+        icon.className = 'fa-solid fa-volume-high';
+        showToast('Sound alerts enabled', 'info');
+      } else {
+        icon.className = 'fa-solid fa-volume-xmark text-slate-500';
+        showToast('Sound alerts muted', 'info');
+      }
+    }
+
+    // UPDATE UI CONNECTION STATUS
+    function setConnectionStatus(state, message) {
+      statusDot.className = 'w-2.5 h-2.5 rounded-full ';
+      if (state === 'connected') {
+        statusDot.className += 'bg-emerald-500 animate-pulse-dot shadow-lg shadow-emerald-500/50';
+        statusText.textContent = message || 'Connected Direct';
+        statusText.className = 'text-emerald-400 font-medium';
+      } else if (state === 'connecting') {
+        statusDot.className += 'bg-amber-500 animate-pulse';
+        statusText.textContent = message || 'Connecting...';
+        statusText.className = 'text-amber-400 font-medium';
+      } else {
+        statusDot.className += 'bg-slate-500';
+        statusText.textContent = message || 'Disconnected';
+        statusText.className = 'text-slate-400';
+      }
+    }
+
+    // HOST A NEW ROOM
+    function hostRoom() {
+      const generatedId = 'beam-' + Math.random().toString(36).substring(2, 8);
+      currentRoomId = generatedId;
+      isHost = true;
+
+      setConnectionStatus('connecting', 'Creating Room...');
+      
+      peer = new Peer(currentRoomId, peerConfig);
+
+      peer.on('open', (id) => {
+        myPeerId = id;
+        window.location.hash = currentRoomId;
+        switchToChatView();
+        setConnectionStatus('connecting', 'Waiting for Peer...');
+        openShareModal();
+      });
+
+      peer.on('connection', (conn) => {
+        handlePeerConnection(conn);
+      });
+
+      peer.on('error', (err) => {
+        console.error('PeerJS Host Error:', err);
+        showToast('Connection error: ' + err.type, 'error');
+        setConnectionStatus('disconnected');
+      });
+    }
+
+    // JOIN AN EXISTING ROOM
+    function joinRoom(targetRoomId) {
+      // Clean target room ID if full URL pasted
+      if (targetRoomId.includes('#')) {
+        targetRoomId = targetRoomId.split('#')[1];
+      }
+      targetRoomId = targetRoomId.trim();
+
+      if (!targetRoomId) {
+        showToast('Please enter a valid Room ID', 'error');
+        return;
+      }
+
+      currentRoomId = targetRoomId;
+      isHost = false;
+
+      setConnectionStatus('connecting', 'Connecting to Peer...');
+
+      // Anonymous Peer ID for guest
+      peer = new Peer(peerConfig);
+
+      peer.on('open', (id) => {
+        myPeerId = id;
+        window.location.hash = currentRoomId;
+        
+        // Initiate Connection to Host
+        const conn = peer.connect(currentRoomId, { reliable: true });
+        handlePeerConnection(conn);
+      });
+
+      peer.on('error', (err) => {
+        console.error('PeerJS Guest Error:', err);
+        showToast('Could not find room or peer is offline.', 'error');
+        setConnectionStatus('disconnected');
+      });
+    }
+
+    function handleManualJoin(e) {
+      e.preventDefault();
+      const val = document.getElementById('room-input').value;
+      if (val) joinRoom(val);
+    }
+
+    // COMMON CONNECTION HANDLER
+    function handlePeerConnection(conn) {
+      activeConn = conn;
+
+      activeConn.on('open', () => {
+        setConnectionStatus('connected', 'Direct P2P Connected');
+        switchToChatView();
+        if (waitingPlaceholder) waitingPlaceholder.classList.add('hidden');
+        headerShareBtn.classList.remove('hidden');
+        leaveBtn.classList.remove('hidden');
+        closeShareModal();
+        showToast('Connected directly to peer!', 'success');
+
+        // System message inside chat
+        appendSystemMessage('Peer connected. End-to-end encrypted channel open.');
+      });
+
+      activeConn.on('data', (data) => {
+        handleIncomingData(data);
+      });
+
+      activeConn.on('close', () => {
+        setConnectionStatus('disconnected', 'Peer Disconnected');
+        appendSystemMessage('Peer has disconnected from the room.');
+        showToast('Peer disconnected', 'warning');
+      });
+
+      activeConn.on('error', (err) => {
+        console.error('Data Channel Error:', err);
+        showToast('Data channel error occurred', 'error');
+      });
+    }
+
+    // SWITCH BETWEEN LOBBY AND CHAT UI
+    function switchToChatView() {
+      lobbyView.classList.add('hidden');
+      chatView.classList.remove('hidden');
+      chatRoomIdDisplay.textContent = currentRoomId;
+      leaveBtn.classList.remove('hidden');
+      headerShareBtn.classList.remove('hidden');
+    }
+
+    // LEAVE ROOM
+    function confirmLeaveRoom() {
+      if (confirm('Are you sure you want to leave this room?')) {
+        if (activeConn) activeConn.close();
+        if (peer) peer.destroy();
+        
+        window.location.hash = '';
+        activeConn = null;
+        peer = null;
+        currentRoomId = null;
+
+        // Reset UI
+        chatView.classList.add('hidden');
+        lobbyView.classList.remove('hidden');
+        headerShareBtn.classList.add('hidden');
+        leaveBtn.classList.add('hidden');
+        setConnectionStatus('disconnected');
+        messagesContainer.innerHTML = '';
+        if (waitingPlaceholder) {
+          messagesContainer.appendChild(waitingPlaceholder);
+          waitingPlaceholder.classList.remove('hidden');
+        }
+      }
+    }
+
+    // HANDLE INCOMING MESSAGES & DATA
+    function handleIncomingData(data) {
+      if (!data || !data.type) return;
+
+      switch (data.type) {
+        case 'text':
+          appendTextMessage({
+            id: data.id,
+            sender: 'peer',
+            text: data.text,
+            timestamp: data.timestamp
+          });
+          playNotificationSound();
+          // Send ACK back
+          if (activeConn) activeConn.send({ type: 'ack', id: data.id });
+          break;
+
+        case 'file':
+          appendFileMessage({
+            id: data.id,
+            sender: 'peer',
+            name: data.name,
+            fileType: data.fileType,
+            size: data.size,
+            isImage: data.isImage,
+            dataUrl: data.dataUrl,
+            timestamp: data.timestamp
+          });
+          playNotificationSound();
+          if (activeConn) activeConn.send({ type: 'ack', id: data.id });
+          break;
+
+        case 'typing':
+          toggleTypingIndicator(data.isTyping);
+          break;
+
+        case 'ack':
+          markMessageDelivered(data.id);
+          break;
+      }
+    }
+
+    // SEND TEXT MESSAGE
+    function handleSendText(e) {
+      if (e) e.preventDefault();
+      const text = chatInput.value.trim();
+      if (!text) return;
+
+      if (!activeConn || activeConn.open === false) {
+        showToast('Cannot send: Peer is not connected yet.', 'warning');
+        return;
+      }
+
+      const msgId = 'msg-' + Date.now();
+      const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+      // Send via WebRTC Data Channel
+      const payload = {
+        type: 'text',
+        id: msgId,
+        text: text,
+        timestamp: timestamp
+      };
+
+      activeConn.send(payload);
+
+      // Render local message
+      appendTextMessage({
+        id: msgId,
+        sender: 'you',
+        text: text,
+        timestamp: timestamp
+      });
+
+      // Clear Input
+      chatInput.value = '';
+      chatInput.style.height = 'auto';
+      sendTypingSignal(false);
+    }
+
+    // APPEND TEXT MESSAGE BUBBLE
+    function appendTextMessage({ id, sender, text, timestamp }) {
+      if (waitingPlaceholder) waitingPlaceholder.classList.add('hidden');
+
+      const isYou = sender === 'you';
+      const wrapper = document.createElement('div');
+      wrapper.className = `flex flex-col ${isYou ? 'items-end' : 'items-start'} space-y-1 mb-3`;
+      wrapper.id = id;
+
+      const bubble = document.createElement('div');
+      bubble.className = isYou
+        ? 'bg-indigo-600 text-white rounded-2xl rounded-tr-xs px-4 py-2.5 max-w-[85%] sm:max-w-md shadow-md text-sm break-words whitespace-pre-wrap'
+        : 'bg-slate-800 text-slate-100 rounded-2xl rounded-tl-xs px-4 py-2.5 max-w-[85%] sm:max-w-md border border-slate-700/80 shadow-md text-sm break-words whitespace-pre-wrap';
+
+      bubble.textContent = text;
+
+      const meta = document.createElement('div');
+      meta.className = 'flex items-center space-x-1.5 text-[10px] text-slate-500 px-1';
+      meta.innerHTML = `
+        <span>${isYou ? 'You' : 'Peer'}</span>
+        <span>•</span>
+        <span>${timestamp}</span>
+        ${isYou ? `<span id="status-${id}" title="Sending..."><i class="fa-solid fa-check text-slate-600"></i></span>` : ''}
+      `;
+
+      wrapper.appendChild(bubble);
+      wrapper.appendChild(meta);
+      messagesContainer.appendChild(wrapper);
+      scrollToBottom();
+    }
+
+    // SEND FILE / IMAGE
+    function handleFileSelect(e) {
+      const file = e.target.files[0];
+      if (file) processAndSendFile(file);
+      e.target.value = ''; // Reset input
+    }
+
+    function processAndSendFile(file) {
+      if (!activeConn || activeConn.open === false) {
+        showToast('Cannot send file: Peer not connected.', 'warning');
+        return;
+      }
+
+      // Max size soft limit suggestion (e.g. 50MB for browser memory safety)
+      if (file.size > 50 * 1024 * 1024) {
+        if (!confirm('File is over 50MB. Large files may slow down browser memory. Proceed?')) {
+          return;
+        }
+      }
+
+      showToast(`Preparing ${file.name}...`, 'info');
+
+      const reader = new FileReader();
+      reader.onload = function (evt) {
+        const dataUrl = evt.target.result;
+        const msgId = 'file-' + Date.now();
+        const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        const isImage = file.type.startsWith('image/');
+        const formattedSize = formatFileSize(file.size);
+
+        const payload = {
+          type: 'file',
+          id: msgId,
+          name: file.name,
+          fileType: file.type,
+          size: formattedSize,
+          isImage: isImage,
+          dataUrl: dataUrl,
+          timestamp: timestamp
+        };
+
+        // Send over WebRTC Data Connection
+        activeConn.send(payload);
+
+        // Render Local Message Bubble
+        appendFileMessage({
+          id: msgId,
+          sender: 'you',
+          name: file.name,
+          fileType: file.type,
+          size: formattedSize,
+          isImage: isImage,
+          dataUrl: dataUrl,
+          timestamp: timestamp
+        });
+      };
+
+      reader.readAsDataURL(file);
+    }
+
+    // APPEND FILE OR IMAGE MESSAGE
+    function appendFileMessage({ id, sender, name, fileType, size, isImage, dataUrl, timestamp }) {
+      if (waitingPlaceholder) waitingPlaceholder.classList.add('hidden');
+
+      const isYou = sender === 'you';
+      const wrapper = document.createElement('div');
+      wrapper.className = `flex flex-col ${isYou ? 'items-end' : 'items-start'} space-y-1 mb-3`;
+      wrapper.id = id;
+
+      const bubble = document.createElement('div');
+      bubble.className = isYou
+        ? 'bg-indigo-600 text-white rounded-2xl rounded-tr-xs p-3 max-w-[85%] sm:max-w-md shadow-md text-sm'
+        : 'bg-slate-800 text-slate-100 rounded-2xl rounded-tl-xs p-3 max-w-[85%] sm:max-w-md border border-slate-700/80 shadow-md text-sm';
+
+      if (isImage) {
+        // IMAGE DISPLAY
+        bubble.innerHTML = `
+          <div class="space-y-2">
+            <div class="relative group rounded-lg overflow-hidden bg-slate-950/40 border border-black/10 cursor-pointer" onclick="openImageModal('${dataUrl}', '${escapeHtml(name)}')">
+              <img src="${dataUrl}" alt="${escapeHtml(name)}" class="max-h-60 w-auto rounded-lg object-cover hover:opacity-95 transition-opacity" />
+              <div class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity text-white text-xs space-x-1 font-medium">
+                <i class="fa-solid fa-expand"></i>
+                <span>Click to expand</span>
+              </div>
+            </div>
+            <div class="flex items-center justify-between text-xs pt-1">
+              <span class="truncate max-w-[180px] font-medium opacity-90">${escapeHtml(name)}</span>
+              <a href="${dataUrl}" download="${escapeHtml(name)}" class="ml-2 hover:underline text-indigo-200 flex items-center space-x-1 bg-black/20 px-2 py-1 rounded">
+                <i class="fa-solid fa-download"></i>
+                <span>${size}</span>
+              </a>
+            </div>
+          </div>
+        `;
+      } else {
+        // NON-IMAGE FILE DISPLAY
+        const fileIcon = getIconForFileType(fileType, name);
+        bubble.innerHTML = `
+          <div class="flex items-center space-x-3">
+            <div class="w-10 h-10 rounded-lg bg-black/20 flex items-center justify-center text-xl shrink-0">
+              <i class="${fileIcon}"></i>
+            </div>
+            <div class="flex-1 min-w-0">
+              <p class="font-semibold text-xs truncate">${escapeHtml(name)}</p>
+              <p class="text-[10px] opacity-75">${size}</p>
+            </div>
+            <a href="${dataUrl}" download="${escapeHtml(name)}" class="bg-black/20 hover:bg-black/40 text-white p-2 rounded-lg transition-colors shrink-0" title="Download File">
+              <i class="fa-solid fa-download"></i>
+            </a>
+          </div>
+        `;
+      }
+
+      const meta = document.createElement('div');
+      meta.className = 'flex items-center space-x-1.5 text-[10px] text-slate-500 px-1';
+      meta.innerHTML = `
+        <span>${isYou ? 'You' : 'Peer'}</span>
+        <span>•</span>
+        <span>${timestamp}</span>
+        ${isYou ? `<span id="status-${id}" title="Delivered"><i class="fa-solid fa-check text-slate-600"></i></span>` : ''}
+      `;
+
+      wrapper.appendChild(bubble);
+      wrapper.appendChild(meta);
+      messagesContainer.appendChild(wrapper);
+      scrollToBottom();
+    }
+
+    // SYSTEM MESSAGE (Centered status updates)
+    function appendSystemMessage(text) {
+      if (waitingPlaceholder) waitingPlaceholder.classList.add('hidden');
+      const pill = document.createElement('div');
+      pill.className = 'flex justify-center my-3';
+      pill.innerHTML = `
+        <span class="bg-slate-800/80 border border-slate-700/50 text-slate-400 text-[11px] px-3 py-1 rounded-full text-center">
+          ${escapeHtml(text)}
+        </span>
+      `;
+      messagesContainer.appendChild(pill);
+      scrollToBottom();
+    }
+
+    // MARK MESSAGE DELIVERED (ACK)
+    function markMessageDelivered(msgId) {
+      const el = document.getElementById(`status-${msgId}`);
+      if (el) {
+        el.innerHTML = `<i class="fa-solid fa-check-double text-indigo-400" title="Delivered to peer"></i>`;
+      }
+    }
+
+    // TYPING INDICATOR LOGIC
+    function handleInputChange(el) {
+      // Auto expand height
+      el.style.height = 'auto';
+      el.style.height = Math.min(el.scrollHeight, 128) + 'px';
+
+      // Typing notification throttling
+      if (activeConn && activeConn.open) {
+        sendTypingSignal(true);
+        clearTimeout(typingTimer);
+        typingTimer = setTimeout(() => {
+          sendTypingSignal(false);
+        }, 2000);
+      }
+    }
+
+    function handleKeyDown(e) {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        handleSendText();
+      }
+    }
+
+    function sendTypingSignal(isTyping) {
+      if (activeConn && activeConn.open) {
+        activeConn.send({ type: 'typing', isTyping: isTyping });
+      }
+    }
+
+    function toggleTypingIndicator(show) {
+      const indicator = document.getElementById('typing-indicator');
+      if (show) {
+        indicator.classList.remove('hidden');
+        scrollToBottom();
+      } else {
+        indicator.classList.add('hidden');
+      }
+    }
+
+    // DRAG AND DROP ZONE
+    function setupDragAndDrop() {
+      const dropZone = document.body;
+
+      ['dragenter', 'dragover'].forEach(eventName => {
+        dropZone.addEventListener(eventName, (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          if (activeConn && activeConn.open) {
+            dropOverlay.classList.remove('opacity-0', 'pointer-events-none');
+          }
+        }, false);
+      });
+
+      ['dragleave', 'drop'].forEach(eventName => {
+        dropZone.addEventListener(eventName, (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          dropOverlay.classList.add('opacity-0', 'pointer-events-none');
+        }, false);
+      });
+
+      dropZone.addEventListener('drop', (e) => {
+        const dt = e.dataTransfer;
+        const files = dt.files;
+        if (files && files.length > 0) {
+          processAndSendFile(files[0]);
+        }
+      });
+    }
+
+    // MODAL UTILITIES
+    function openShareModal() {
+      if (!currentRoomId) return;
+
+      const shareUrl = `${window.location.origin}${window.location.pathname}#${currentRoomId}`;
+      document.getElementById('share-url-input').value = shareUrl;
+
+      // Render QR Code using QRCode.js
+      const qrContainer = document.getElementById('qrcode');
+      qrContainer.innerHTML = '';
+      new QRCode(qrContainer, {
+        text: shareUrl,
+        width: 180,
+        height: 180,
+        colorDark: "#0f172a",
+        colorLight: "#ffffff",
+        correctLevel: QRCode.CorrectLevel.M
+      });
+
+      document.getElementById('share-modal').classList.remove('hidden');
+    }
+
+    function closeShareModal() {
+      document.getElementById('share-modal').classList.add('hidden');
+    }
+
+    function openImageModal(dataUrl, filename) {
+      const imgEl = document.getElementById('modal-image-element');
+      const downloadBtn = document.getElementById('modal-download-btn');
+      imgEl.src = dataUrl;
+      downloadBtn.href = dataUrl;
+      downloadBtn.download = filename;
+      document.getElementById('image-modal').classList.remove('hidden');
+    }
+
+    function closeImageModal() {
+      document.getElementById('image-modal').classList.add('hidden');
+    }
+
+    // COPY SHARE LINK TO CLIPBOARD
+    function copyRoomLink() {
+      const input = document.getElementById('share-url-input');
+      const shareUrl = input.value || `${window.location.origin}${window.location.pathname}#${currentRoomId}`;
+      
+      // Fallback copy logic for iframe restrictions
+      const tempInput = document.createElement('input');
+      tempInput.value = shareUrl;
+      document.body.appendChild(tempInput);
+      tempInput.select();
+      try {
+        document.execCommand('copy');
+        showToast('Share link copied to clipboard!', 'success');
+      } catch (err) {
+        showToast('Failed to copy automatically.', 'error');
+      }
+      document.body.removeChild(tempInput);
+    }
+
+    // TOAST NOTIFICATIONS
+    function showToast(message, type = 'info') {
+      const container = document.getElementById('toast-container');
+      const toast = document.createElement('div');
+      
+      let borderClass = 'border-slate-700 bg-slate-900 text-slate-200';
+      let icon = 'fa-circle-info text-indigo-400';
+
+      if (type === 'success') {
+        borderClass = 'border-emerald-500/50 bg-slate-900 text-emerald-200';
+        icon = 'fa-circle-check text-emerald-400';
+      } else if (type === 'error') {
+        borderClass = 'border-rose-500/50 bg-slate-900 text-rose-200';
+        icon = 'fa-triangle-exclamation text-rose-400';
+      } else if (type === 'warning') {
+        borderClass = 'border-amber-500/50 bg-slate-900 text-amber-200';
+        icon = 'fa-circle-exclamation text-amber-400';
+      }
+
+      toast.className = `flex items-center space-x-2 border px-4 py-2.5 rounded-xl shadow-xl text-xs font-medium backdrop-blur-md transition-all transform translate-y-2 opacity-0 pointer-events-auto ${borderClass}`;
+      toast.innerHTML = `<i class="fa-solid ${icon}"></i><span>${escapeHtml(message)}</span>`;
+
+      container.appendChild(toast);
+
+      // Animate in
+      requestAnimationFrame(() => {
+        toast.classList.remove('translate-y-2', 'opacity-0');
+      });
+
+      // Dismiss after 3 seconds
+      setTimeout(() => {
+        toast.classList.add('opacity-0', 'translate-y-2');
+        setTimeout(() => toast.remove(), 300);
+      }, 3000);
+    }
+
+    // HELPER UTILITIES
+    function scrollToBottom() {
+      messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    }
+
+    function formatFileSize(bytes) {
+      if (!bytes || bytes === 0) return '0 B';
+      const k = 1024;
+      const sizes = ['B', 'KB', 'MB', 'GB'];
+      const i = Math.floor(Math.log(bytes) / Math.log(k));
+      return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+    }
+
+    function getIconForFileType(mimeType, filename) {
+      if (!mimeType) mimeType = '';
+      const ext = filename.split('.').pop().toLowerCase();
+
+      if (mimeType.startsWith('image/')) return 'fa-solid fa-file-image text-emerald-400';
+      if (mimeType.startsWith('video/')) return 'fa-solid fa-file-video text-purple-400';
+      if (mimeType.startsWith('audio/')) return 'fa-solid fa-file-audio text-amber-400';
+      if (mimeType.includes('pdf') || ext === 'pdf') return 'fa-solid fa-file-pdf text-rose-400';
+      if (mimeType.includes('zip') || mimeType.includes('compressed') || ['zip','rar','7z','tar','gz'].includes(ext)) {
+        return 'fa-solid fa-file-zipper text-indigo-400';
+      }
+      if (['js','html','css','py','java','cpp','json','ts'].includes(ext)) return 'fa-solid fa-file-code text-cyan-400';
+      
+      return 'fa-solid fa-file text-slate-400';
+    }
+
+    function escapeHtml(str) {
+      if (!str) return '';
+      return str.replace(/[&<>"']/g, function(m) {
+        return {
+          '&': '&amp;',
+          '<': '&lt;',
+          '>': '&gt;',
+          '"': '&quot;',
+          "'": '&#039;'
+        }[m];
+      });
+    }
+  </script>
+</body>
+</html>
