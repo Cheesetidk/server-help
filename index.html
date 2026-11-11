@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>BeamP2P - Serverless WebRTC Chat & File Sharing</title>
+  <title>CRAZY ROX AND CHEEESET P2P THING AHHHH</title>
   
   <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
@@ -36,7 +36,7 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 
   <style>
-    /* Custom Scrollbar for Chat UI */
+    /* Custom Scrollbar */
     ::-webkit-scrollbar {
       width: 6px;
       height: 6px;
@@ -52,7 +52,7 @@
       background: rgba(71, 85, 105, 1);
     }
 
-    /* Pulsing animations */
+    /* Pulse animations */
     @keyframes pulse-dot {
       0%, 100% { transform: scale(1); opacity: 1; }
       50% { transform: scale(1.25); opacity: 0.7; }
@@ -61,12 +61,15 @@
       animation: pulse-dot 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
     }
 
-    /* Drag and drop overlay transition */
+    /* Voice Call Visualizer Equalizer Animation */
+    .vis-bar {
+      transition: height 0.08s ease-in-out;
+    }
+
     #drop-overlay {
       transition: opacity 0.2s ease-in-out, visibility 0.2s;
     }
 
-    /* Image Modal backdrop blur */
     .modal-backdrop {
       backdrop-filter: blur(8px);
     }
@@ -74,6 +77,9 @@
 </head>
 
 <body class="bg-slate-950 text-slate-100 h-full flex flex-col font-sans antialiased overflow-hidden select-none">
+
+  <!-- HIDDEN AUDIO ELEMENT FOR REMOTE VOICE STREAM -->
+  <audio id="remote-audio" autoplay class="hidden"></audio>
 
   <!-- TOP HEADER -->
   <header class="bg-slate-900/90 border-b border-slate-800 px-4 py-3 flex items-center justify-between shrink-0 z-20 backdrop-blur-md">
@@ -86,24 +92,34 @@
           BeamP2P
           <span class="text-[10px] bg-slate-800 text-slate-400 border border-slate-700 px-1.5 py-0.5 rounded font-mono uppercase">Serverless</span>
         </h1>
-        <p class="text-xs text-slate-400 hidden sm:block">Direct Peer-to-Peer Encrypted Transfer</p>
+        <p class="text-xs text-slate-400 hidden sm:block">Encrypted P2P Chat & Voice Call</p>
       </div>
     </div>
 
     <!-- Right Controls / Status -->
     <div class="flex items-center space-x-2 sm:space-x-3">
+      
       <!-- Connection Status Badge -->
       <div id="status-badge" class="flex items-center space-x-2 bg-slate-800/80 border border-slate-700/60 px-3 py-1.5 rounded-full text-xs font-medium text-slate-300">
         <span id="status-dot" class="w-2.5 h-2.5 rounded-full bg-slate-500"></span>
         <span id="status-text">Disconnected</span>
+        <button id="retry-conn-btn" onclick="manualReconnect()" class="hidden ml-1 text-[10px] bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 px-1.5 py-0.5 rounded transition-colors" title="Retry Connection">
+          <i class="fa-solid fa-rotate-right"></i>
+        </button>
       </div>
+
+      <!-- Voice Call Trigger Button (Enabled in Chat) -->
+      <button id="voice-call-btn" onclick="initiateVoiceCall()" class="hidden bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 border border-emerald-500/30 px-3 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center space-x-1.5">
+        <i class="fa-solid fa-phone"></i>
+        <span class="hidden sm:inline">Voice Call</span>
+      </button>
 
       <!-- Sound Toggle Button -->
       <button id="sound-btn" onclick="toggleSound()" class="p-2 text-slate-400 hover:text-slate-100 hover:bg-slate-800 rounded-lg transition-colors" title="Toggle Sound Notifications">
         <i id="sound-icon" class="fa-solid fa-volume-high"></i>
       </button>
 
-      <!-- Room Info / Share Button (Shown when room active) -->
+      <!-- Room Info / Share Button -->
       <button id="header-share-btn" onclick="openShareModal()" class="hidden sm:flex items-center space-x-1.5 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-400 border border-indigo-500/30 px-3 py-1.5 rounded-lg text-xs font-medium transition-all">
         <i class="fa-solid fa-qrcode"></i>
         <span>Room Link</span>
@@ -116,28 +132,65 @@
     </div>
   </header>
 
+  <!-- VOICE CALL TOP BAR (ACTIVE CALL PANEL) -->
+  <div id="voice-call-bar" class="hidden bg-slate-900 border-b border-indigo-500/30 px-4 py-2.5 flex items-center justify-between z-10 shadow-lg">
+    <div class="flex items-center space-x-3">
+      <div class="relative flex items-center justify-center w-8 h-8 rounded-full bg-emerald-500/20 text-emerald-400">
+        <i class="fa-solid fa-phone-volume text-sm animate-pulse"></i>
+      </div>
+      <div>
+        <div class="flex items-center space-x-2">
+          <span class="text-xs font-bold text-slate-200">Voice Call Connected</span>
+          <span id="call-timer" class="text-xs font-mono text-emerald-400 bg-emerald-950/60 border border-emerald-800/50 px-2 py-0.5 rounded">00:00</span>
+        </div>
+        <p id="call-status-subtitle" class="text-[11px] text-slate-400">Audio encrypted P2P channel active</p>
+      </div>
+    </div>
+
+    <!-- Audio Equalizer Visualizer & Controls -->
+    <div class="flex items-center space-x-3">
+      
+      <!-- Live Equalizer Bars -->
+      <div id="audio-vis-container" class="hidden sm:flex items-end space-x-1 h-5 px-2 py-1 bg-slate-950/60 rounded-md border border-slate-800">
+        <div class="vis-bar w-1 bg-emerald-400 rounded-full h-1"></div>
+        <div class="vis-bar w-1 bg-emerald-400 rounded-full h-2"></div>
+        <div class="vis-bar w-1 bg-emerald-400 rounded-full h-1"></div>
+        <div class="vis-bar w-1 bg-emerald-400 rounded-full h-3"></div>
+      </div>
+
+      <!-- Mute Mic Toggle -->
+      <button id="mute-mic-btn" onclick="toggleMuteMic()" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-lg text-xs font-semibold flex items-center space-x-1.5 transition-colors">
+        <i id="mute-mic-icon" class="fa-solid fa-microphone"></i>
+        <span id="mute-mic-text" class="hidden md:inline">Mute</span>
+      </button>
+
+      <!-- End Call Button -->
+      <button onclick="endVoiceCall(true)" class="px-3 py-1.5 bg-rose-600 hover:bg-rose-500 text-white rounded-lg text-xs font-semibold flex items-center space-x-1.5 shadow-md shadow-rose-600/20 transition-all">
+        <i class="fa-solid fa-phone-slash"></i>
+        <span>End Call</span>
+      </button>
+    </div>
+  </div>
+
   <!-- MAIN CONTAINER -->
   <main class="flex-1 relative flex flex-col overflow-hidden">
 
-    <!-- LOBBY VIEW (Shown before joining/hosting) -->
+    <!-- LOBBY VIEW -->
     <div id="lobby-view" class="flex-1 flex items-center justify-center p-4 overflow-y-auto">
       <div class="max-w-md w-full space-y-6">
         
-        <!-- Hero Title -->
         <div class="text-center space-y-2">
           <div class="inline-flex p-3 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 mb-2">
             <i class="fa-solid fa-network-wired text-3xl"></i>
           </div>
-          <h2 class="text-2xl font-extrabold text-white tracking-tight sm:text-3xl">Direct WebRTC Chat</h2>
+          <h2 class="text-2xl font-extrabold text-white tracking-tight sm:text-3xl">Direct WebRTC Chat & Voice</h2>
           <p class="text-slate-400 text-sm">
-            No servers. No data tracking. Pure peer-to-peer messaging and file transfers direct from browser to browser.
+            Serverless peer-to-peer messaging, instant file transfers, and voice calls direct between browsers.
           </p>
         </div>
 
-        <!-- Action Cards -->
         <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-5 shadow-2xl">
           
-          <!-- Host Room Button -->
           <div>
             <button onclick="hostRoom()" class="w-full bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white font-semibold py-3 px-4 rounded-xl shadow-lg shadow-indigo-600/25 flex items-center justify-center space-x-2 transition-all transform active:scale-[0.98]">
               <i class="fa-solid fa-plus-circle text-lg"></i>
@@ -152,10 +205,9 @@
             <div class="flex-grow border-t border-slate-800"></div>
           </div>
 
-          <!-- Join Form -->
           <form onsubmit="handleManualJoin(event)" class="space-y-3">
             <div>
-              <label for="room-input" class="block text-xs font-medium text-slate-400 mb-1">Room ID or Full Link</label>
+              <label for="room-input" class="block text-xs font-medium text-slate-400 mb-1">Room ID or Share Link</label>
               <div class="relative">
                 <input type="text" id="room-input" placeholder="e.g. beam-x9a2k or pasted link" 
                   class="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-xl px-3.5 py-2.5 text-sm text-slate-100 placeholder-slate-600 outline-none transition-all pr-10" />
@@ -170,29 +222,28 @@
 
         </div>
 
-        <!-- Privacy & Tech Pill -->
         <div class="grid grid-cols-3 gap-2 text-center text-[11px] text-slate-500">
           <div class="bg-slate-900/50 border border-slate-800/80 p-2 rounded-lg">
             <i class="fa-solid fa-shield-halved text-indigo-400 block text-sm mb-1"></i>
-            <span>E2E Direct</span>
+            <span>P2P Encrypted</span>
           </div>
           <div class="bg-slate-900/50 border border-slate-800/80 p-2 rounded-lg">
-            <i class="fa-solid fa-server text-indigo-400 block text-sm mb-1"></i>
-            <span>Zero Server</span>
+            <i class="fa-solid fa-heartbeat text-indigo-400 block text-sm mb-1"></i>
+            <span>Auto Heartbeat</span>
           </div>
           <div class="bg-slate-900/50 border border-slate-800/80 p-2 rounded-lg">
-            <i class="fa-solid fa-infinity text-indigo-400 block text-sm mb-1"></i>
-            <span>Unlimited Sharing</span>
+            <i class="fa-solid fa-microphone text-indigo-400 block text-sm mb-1"></i>
+            <span>HD Voice Call</span>
           </div>
         </div>
 
       </div>
     </div>
 
-    <!-- CHAT VIEW (Shown when in a room) -->
+    <!-- CHAT VIEW -->
     <div id="chat-view" class="hidden flex-1 flex flex-col h-full relative">
       
-      <!-- Chat Banner Notice / Peer Bar -->
+      <!-- Chat Banner / Peer Bar -->
       <div class="bg-slate-900/60 border-b border-slate-800/80 px-4 py-2 flex items-center justify-between text-xs shrink-0">
         <div class="flex items-center space-x-2 truncate">
           <span class="text-slate-400">Room:</span>
@@ -201,7 +252,7 @@
         <div class="flex items-center space-x-2">
           <button onclick="copyRoomLink()" class="text-slate-400 hover:text-indigo-400 flex items-center space-x-1 px-2 py-1 rounded bg-slate-800/60 hover:bg-slate-800 transition-colors">
             <i class="fa-regular fa-copy"></i>
-            <span class="hidden sm:inline">Copy Share Link</span>
+            <span class="hidden sm:inline">Copy Link</span>
           </button>
           <button onclick="openShareModal()" class="text-slate-400 hover:text-indigo-400 flex items-center space-x-1 px-2 py-1 rounded bg-slate-800/60 hover:bg-slate-800 transition-colors">
             <i class="fa-solid fa-qrcode"></i>
@@ -212,14 +263,13 @@
 
       <!-- Messages Area -->
       <div id="messages-container" class="flex-1 overflow-y-auto p-4 space-y-4">
-        <!-- Waiting placeholder if alone -->
         <div id="waiting-placeholder" class="h-full flex flex-col items-center justify-center text-center p-6 space-y-4">
           <div class="w-16 h-16 rounded-full bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 text-2xl animate-bounce">
             <i class="fa-solid fa-user-clock"></i>
           </div>
           <div class="max-w-xs">
             <h3 class="font-bold text-slate-200 text-base">Waiting for peer to join...</h3>
-            <p class="text-slate-400 text-xs mt-1">Send the room link or QR code to someone. Once they open it, messaging will activate automatically.</p>
+            <p class="text-slate-400 text-xs mt-1">Send the room link or QR code to someone. Once opened, messaging & voice will activate automatically.</p>
           </div>
           <button onclick="openShareModal()" class="bg-indigo-600 hover:bg-indigo-500 text-white font-medium px-4 py-2 rounded-xl text-xs flex items-center space-x-2 shadow-lg shadow-indigo-600/20">
             <i class="fa-solid fa-share-nodes"></i>
@@ -242,20 +292,17 @@
       <div class="p-3 bg-slate-900 border-t border-slate-800 shrink-0">
         <form onsubmit="handleSendText(event)" class="flex items-end space-x-2">
           
-          <!-- Attachment Button -->
           <label class="p-2.5 text-slate-400 hover:text-indigo-400 hover:bg-slate-800 rounded-xl cursor-pointer transition-colors shrink-0" title="Attach Image or File">
             <i class="fa-solid fa-paperclip text-lg"></i>
             <input type="file" id="file-input" class="hidden" onchange="handleFileSelect(event)" />
           </label>
 
-          <!-- Text Field -->
           <div class="flex-1 relative">
-            <textarea id="chat-input" rows="1" placeholder="Type a message or drag & drop files here..." 
+            <textarea id="chat-input" rows="1" placeholder="Type a message or drop files here..." 
               oninput="handleInputChange(this)" onkeydown="handleKeyDown(event)"
               class="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-xl px-3.5 py-2.5 text-sm text-slate-100 placeholder-slate-500 outline-none resize-none max-h-32 min-h-[42px] transition-all"></textarea>
           </div>
 
-          <!-- Send Button -->
           <button type="submit" id="send-btn" class="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed text-white p-2.5 rounded-xl transition-all shrink-0 flex items-center justify-center w-11 h-11">
             <i class="fa-solid fa-paper-plane text-sm"></i>
           </button>
@@ -286,12 +333,10 @@
         <p class="text-slate-400 text-xs">Scan QR code or send link to start chatting</p>
       </div>
 
-      <!-- QR Container -->
       <div class="bg-white p-4 rounded-xl flex items-center justify-center shadow-inner w-48 h-48 mx-auto">
         <div id="qrcode"></div>
       </div>
 
-      <!-- Room Code Box -->
       <div class="space-y-2">
         <label class="block text-xs text-slate-400 font-medium">Direct Share Link</label>
         <div class="flex items-center space-x-2">
@@ -302,7 +347,7 @@
         </div>
       </div>
 
-      <p class="text-[11px] text-slate-500 text-center">Connection will establish automatically once peer opens the link.</p>
+      <p class="text-[11px] text-slate-500 text-center">Connection will establish automatically once peer opens link.</p>
     </div>
   </div>
 
@@ -322,23 +367,111 @@
     </div>
   </div>
 
-  <!-- ALERT NOTIFICATION BANNER CONTAINER -->
+  <!-- MODAL: FILE SEND CONFIRMATION -->
+  <div id="file-confirm-modal" class="fixed inset-0 bg-slate-950/80 modal-backdrop z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-sm w-full p-5 space-y-4 relative shadow-2xl">
+      
+      <button onclick="cancelStagedFile()" class="absolute top-4 right-4 text-slate-400 hover:text-slate-200">
+        <i class="fa-solid fa-xmark text-lg"></i>
+      </button>
+
+      <div class="text-center space-y-1">
+        <h3 class="text-lg font-bold text-white">Confirm Attachment</h3>
+        <p class="text-slate-400 text-xs">Review file before sending to peer</p>
+      </div>
+
+      <div class="bg-slate-950 border border-slate-800 rounded-xl p-3 flex flex-col items-center justify-center min-h-[140px] max-h-[220px] overflow-hidden relative">
+        <img id="confirm-file-preview-img" src="" class="max-h-[180px] w-auto rounded-lg object-contain hidden" />
+        <div id="confirm-file-icon-container" class="w-16 h-16 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400">
+          <i id="confirm-file-icon" class="fa-solid fa-file text-3xl"></i>
+        </div>
+      </div>
+
+      <div class="bg-slate-800/50 border border-slate-700/50 rounded-xl p-3 space-y-1">
+        <p id="confirm-file-name" class="text-xs font-semibold text-slate-100 truncate text-center">filename.jpg</p>
+        <p id="confirm-file-size" class="text-[11px] text-slate-400 text-center">0 B</p>
+      </div>
+
+      <div class="flex space-x-3">
+        <button onclick="cancelStagedFile()" class="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold py-2.5 rounded-xl border border-slate-700 text-xs transition-colors">
+          Cancel
+        </button>
+        <button onclick="sendStagedFile()" class="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold py-2.5 rounded-xl shadow-lg shadow-indigo-600/25 text-xs flex items-center justify-center space-x-1.5 transition-colors">
+          <i class="fa-solid fa-paper-plane"></i>
+          <span>Send File</span>
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- MODAL: INCOMING VOICE CALL BANNER -->
+  <div id="incoming-call-modal" class="fixed inset-0 bg-slate-950/80 modal-backdrop z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-slate-900 border border-indigo-500/40 rounded-2xl max-w-sm w-full p-6 text-center space-y-5 shadow-2xl animate-bounce-short">
+      
+      <div class="w-20 h-20 rounded-full bg-emerald-500/20 border-2 border-emerald-500/50 flex items-center justify-center text-emerald-400 text-3xl mx-auto animate-pulse">
+        <i class="fa-solid fa-phone-volume"></i>
+      </div>
+
+      <div>
+        <h3 class="text-lg font-bold text-white">Incoming Voice Call</h3>
+        <p class="text-xs text-slate-400 mt-1">Your peer is inviting you to an encrypted audio call.</p>
+      </div>
+
+      <div class="flex space-x-3 pt-2">
+        <button onclick="declineIncomingCall()" class="flex-1 bg-slate-800 hover:bg-rose-950/60 hover:text-rose-400 text-slate-300 font-semibold py-3 rounded-xl border border-slate-700 text-xs transition-colors flex items-center justify-center space-x-2">
+          <i class="fa-solid fa-phone-slash"></i>
+          <span>Decline</span>
+        </button>
+        <button onclick="acceptIncomingCall()" class="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold py-3 rounded-xl shadow-lg shadow-emerald-600/25 text-xs flex items-center justify-center space-x-2 transition-colors">
+          <i class="fa-solid fa-phone"></i>
+          <span>Accept Call</span>
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- TOAST CONTAINER -->
   <div id="toast-container" class="fixed bottom-4 right-4 z-50 space-y-2 pointer-events-none"></div>
 
 
-  <!-- APPLICATION LOGIC -->
+  <!-- APPLICATION SCRIPT LOGIC -->
   <script>
-    // Global State
+    // GLOBAL STATE
     let peer = null;
     let activeConn = null;
     let myPeerId = null;
     let currentRoomId = null;
     let isHost = false;
     let soundEnabled = true;
-    let typingTimer = null;
-    let isPeerTyping = false;
 
-    // WebRTC Peer Configuration (Google Public STUN Servers)
+    // Heartbeat & Reconnection State
+    let pingInterval = null;
+    let heartbeatCheckInterval = null;
+    let peerServerPingInterval = null;
+    let lastPongTime = Date.now();
+    let isReconnecting = false;
+
+    // File Stage State
+    let stagedFile = null;
+    let stagedFileDataUrl = null;
+
+    // Typing State
+    let typingTimer = null;
+
+    // Voice Call State
+    let mediaCall = null;
+    let pendingIncomingCall = null;
+    let localAudioStream = null;
+    let callTimerInterval = null;
+    let callStartTime = null;
+    let isMicMuted = false;
+    let audioContext = null;
+    let analyserNode = null;
+    let visualizerAnimFrame = null;
+
+    // WebRTC Public STUN Configuration
     const peerConfig = {
       config: {
         iceServers: [
@@ -350,25 +483,25 @@
       debug: 1
     };
 
-    // DOM Elements
+    // DOM ELEMENTS
     const lobbyView = document.getElementById('lobby-view');
     const chatView = document.getElementById('chat-view');
     const statusDot = document.getElementById('status-dot');
     const statusText = document.getElementById('status-text');
+    const retryConnBtn = document.getElementById('retry-conn-btn');
     const messagesContainer = document.getElementById('messages-container');
     const chatInput = document.getElementById('chat-input');
     const waitingPlaceholder = document.getElementById('waiting-placeholder');
     const headerShareBtn = document.getElementById('header-share-btn');
+    const voiceCallBtn = document.getElementById('voice-call-btn');
     const leaveBtn = document.getElementById('leave-btn');
     const chatRoomIdDisplay = document.getElementById('chat-room-id-display');
     const dropOverlay = document.getElementById('drop-overlay');
 
-    // INITIALIZATION ON PAGE LOAD
+    // INITIALIZATION
     window.addEventListener('DOMContentLoaded', () => {
-      // Setup Drag & Drop File Listeners
       setupDragAndDrop();
 
-      // Auto-join if Hash present in URL
       const hash = window.location.hash.replace('#', '').trim();
       if (hash) {
         showToast('Found room link! Connecting...', 'info');
@@ -376,7 +509,7 @@
       }
     });
 
-    // Web Audio Synthesizer for Message Alerts
+    // WEB AUDIO API SOUND SYNTHESIZERS
     function playNotificationSound() {
       if (!soundEnabled) return;
       try {
@@ -386,15 +519,31 @@
         osc.type = 'sine';
         osc.frequency.setValueAtTime(587.33, audioCtx.currentTime); // D5
         osc.frequency.exponentialRampToValueAtTime(880, audioCtx.currentTime + 0.12); // A5
-        gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
+        gain.gain.setValueAtTime(0.12, audioCtx.currentTime);
         gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.25);
         osc.connect(gain);
         gain.connect(audioCtx.destination);
         osc.start();
         osc.stop(audioCtx.currentTime + 0.25);
-      } catch (e) {
-        console.error('Audio playback error', e);
-      }
+      } catch (e) {}
+    }
+
+    function playRingtoneSound() {
+      if (!soundEnabled) return;
+      try {
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(440, audioCtx.currentTime);
+        osc.frequency.setValueAtTime(880, audioCtx.currentTime + 0.2);
+        gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.4);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.4);
+      } catch (e) {}
     }
 
     function toggleSound() {
@@ -402,28 +551,32 @@
       const icon = document.getElementById('sound-icon');
       if (soundEnabled) {
         icon.className = 'fa-solid fa-volume-high';
-        showToast('Sound alerts enabled', 'info');
+        showToast('Sound notifications enabled', 'info');
       } else {
         icon.className = 'fa-solid fa-volume-xmark text-slate-500';
-        showToast('Sound alerts muted', 'info');
+        showToast('Sound notifications muted', 'info');
       }
     }
 
-    // UPDATE UI CONNECTION STATUS
+    // CONNECTION STATUS UI
     function setConnectionStatus(state, message) {
       statusDot.className = 'w-2.5 h-2.5 rounded-full ';
+      retryConnBtn.classList.add('hidden');
+
       if (state === 'connected') {
         statusDot.className += 'bg-emerald-500 animate-pulse-dot shadow-lg shadow-emerald-500/50';
         statusText.textContent = message || 'Connected Direct';
         statusText.className = 'text-emerald-400 font-medium';
-      } else if (state === 'connecting') {
+        isReconnecting = false;
+      } else if (state === 'reconnecting' || state === 'connecting') {
         statusDot.className += 'bg-amber-500 animate-pulse';
         statusText.textContent = message || 'Connecting...';
         statusText.className = 'text-amber-400 font-medium';
       } else {
-        statusDot.className += 'bg-slate-500';
+        statusDot.className += 'bg-rose-500';
         statusText.textContent = message || 'Disconnected';
-        statusText.className = 'text-slate-400';
+        statusText.className = 'text-rose-400';
+        retryConnBtn.classList.remove('hidden');
       }
     }
 
@@ -434,31 +587,13 @@
       isHost = true;
 
       setConnectionStatus('connecting', 'Creating Room...');
-      
       peer = new Peer(currentRoomId, peerConfig);
 
-      peer.on('open', (id) => {
-        myPeerId = id;
-        window.location.hash = currentRoomId;
-        switchToChatView();
-        setConnectionStatus('connecting', 'Waiting for Peer...');
-        openShareModal();
-      });
-
-      peer.on('connection', (conn) => {
-        handlePeerConnection(conn);
-      });
-
-      peer.on('error', (err) => {
-        console.error('PeerJS Host Error:', err);
-        showToast('Connection error: ' + err.type, 'error');
-        setConnectionStatus('disconnected');
-      });
+      setupPeerListeners();
     }
 
     // JOIN AN EXISTING ROOM
     function joinRoom(targetRoomId) {
-      // Clean target room ID if full URL pasted
       if (targetRoomId.includes('#')) {
         targetRoomId = targetRoomId.split('#')[1];
       }
@@ -472,25 +607,10 @@
       currentRoomId = targetRoomId;
       isHost = false;
 
-      setConnectionStatus('connecting', 'Connecting to Peer...');
-
-      // Anonymous Peer ID for guest
+      setConnectionStatus('connecting', 'Connecting...');
       peer = new Peer(peerConfig);
 
-      peer.on('open', (id) => {
-        myPeerId = id;
-        window.location.hash = currentRoomId;
-        
-        // Initiate Connection to Host
-        const conn = peer.connect(currentRoomId, { reliable: true });
-        handlePeerConnection(conn);
-      });
-
-      peer.on('error', (err) => {
-        console.error('PeerJS Guest Error:', err);
-        showToast('Could not find room or peer is offline.', 'error');
-        setConnectionStatus('disconnected');
-      });
+      setupPeerListeners();
     }
 
     function handleManualJoin(e) {
@@ -499,21 +619,96 @@
       if (val) joinRoom(val);
     }
 
-    // COMMON CONNECTION HANDLER
+    // PEERJS EVENT LISTENERS SETUP
+    function setupPeerListeners() {
+      peer.on('open', (id) => {
+        myPeerId = id;
+        window.location.hash = currentRoomId;
+        switchToChatView();
+
+        if (isHost) {
+          setConnectionStatus('connecting', 'Waiting for Peer...');
+          openShareModal();
+        } else {
+          // Connect to Host
+          connectDataChannel(currentRoomId);
+        }
+
+        // Keep signaling server connection alive
+        startPeerServerKeepAlive();
+      });
+
+      peer.on('connection', (conn) => {
+        handlePeerConnection(conn);
+      });
+
+      // Handle Incoming Voice Calls
+      peer.on('call', (call) => {
+        pendingIncomingCall = call;
+        playRingtoneSound();
+        document.getElementById('incoming-call-modal').classList.remove('hidden');
+      });
+
+      peer.on('disconnected', () => {
+        setConnectionStatus('reconnecting', 'Signaling Lost...');
+        if (peer && !peer.destroyed) {
+          peer.reconnect();
+        }
+      });
+
+      peer.on('error', (err) => {
+        console.error('PeerJS Error:', err);
+        if (err.type === 'peer-not-found') {
+          showToast('Room or peer not found.', 'error');
+        } else {
+          showToast('Network error: ' + err.type, 'error');
+        }
+        setConnectionStatus('disconnected', 'Connection Error');
+      });
+    }
+
+    // CONNECT / RECONNECT DATA CHANNEL
+    function connectDataChannel(targetId) {
+      const conn = peer.connect(targetId, { reliable: true });
+      handlePeerConnection(conn);
+    }
+
     function handlePeerConnection(conn) {
       activeConn = conn;
 
       activeConn.on('open', () => {
         setConnectionStatus('connected', 'Direct P2P Connected');
         switchToChatView();
+        
         if (waitingPlaceholder) waitingPlaceholder.classList.add('hidden');
         headerShareBtn.classList.remove('hidden');
+        voiceCallBtn.classList.remove('hidden');
         leaveBtn.classList.remove('hidden');
         closeShareModal();
+        
         showToast('Connected directly to peer!', 'success');
+        appendSystemMessage('Direct WebRTC encryption tunnel established.');
 
-        // System message inside chat
-        appendSystemMessage('Peer connected. End-to-end encrypted channel open.');
+        // Reset Heartbeat
+        lastPongTime = Date.now();
+        startHeartbeat();
+
+        // Monitor Underlying WebRTC ICE Connection
+        if (activeConn.peerConnection) {
+          activeConn.peerConnection.oniceconnectionstatechange = () => {
+            const state = activeConn.peerConnection.iceConnectionState;
+            console.log('ICE Connection State:', state);
+            if (state === 'disconnected') {
+              setConnectionStatus('reconnecting', 'Reconnecting ICE...');
+              attemptReconnect();
+            } else if (state === 'failed') {
+              setConnectionStatus('disconnected', 'ICE Failed');
+              attemptReconnect();
+            } else if (state === 'connected' || state === 'completed') {
+              setConnectionStatus('connected', 'Direct P2P Connected');
+            }
+          };
+        }
       });
 
       activeConn.on('data', (data) => {
@@ -521,9 +716,11 @@
       });
 
       activeConn.on('close', () => {
+        stopHeartbeat();
         setConnectionStatus('disconnected', 'Peer Disconnected');
-        appendSystemMessage('Peer has disconnected from the room.');
-        showToast('Peer disconnected', 'warning');
+        appendSystemMessage('Peer connection closed.');
+        voiceCallBtn.classList.add('hidden');
+        if (mediaCall) endVoiceCall(false);
       });
 
       activeConn.on('error', (err) => {
@@ -532,45 +729,81 @@
       });
     }
 
-    // SWITCH BETWEEN LOBBY AND CHAT UI
-    function switchToChatView() {
-      lobbyView.classList.add('hidden');
-      chatView.classList.remove('hidden');
-      chatRoomIdDisplay.textContent = currentRoomId;
-      leaveBtn.classList.remove('hidden');
-      headerShareBtn.classList.remove('hidden');
+    // HEARTBEAT & KEEP-ALIVE MECHANISM
+    function startHeartbeat() {
+      stopHeartbeat();
+      
+      // Ping remote peer over WebRTC Data Channel every 4 seconds
+      pingInterval = setInterval(() => {
+        if (activeConn && activeConn.open) {
+          activeConn.send({ type: 'ping' });
+        }
+      }, 4000);
+
+      // Check for Pong responses
+      heartbeatCheckInterval = setInterval(() => {
+        if (Date.now() - lastPongTime > 12000) { // No response for >12s
+          if (!isReconnecting && activeConn) {
+            setConnectionStatus('reconnecting', 'Reconnecting...');
+            attemptReconnect();
+          }
+        }
+      }, 5000);
     }
 
-    // LEAVE ROOM
-    function confirmLeaveRoom() {
-      if (confirm('Are you sure you want to leave this room?')) {
-        if (activeConn) activeConn.close();
-        if (peer) peer.destroy();
-        
-        window.location.hash = '';
-        activeConn = null;
-        peer = null;
-        currentRoomId = null;
+    function stopHeartbeat() {
+      if (pingInterval) clearInterval(pingInterval);
+      if (heartbeatCheckInterval) clearInterval(heartbeatCheckInterval);
+    }
 
-        // Reset UI
-        chatView.classList.add('hidden');
-        lobbyView.classList.remove('hidden');
-        headerShareBtn.classList.add('hidden');
-        leaveBtn.classList.add('hidden');
-        setConnectionStatus('disconnected');
-        messagesContainer.innerHTML = '';
-        if (waitingPlaceholder) {
-          messagesContainer.appendChild(waitingPlaceholder);
-          waitingPlaceholder.classList.remove('hidden');
+    function startPeerServerKeepAlive() {
+      if (peerServerPingInterval) clearInterval(peerServerPingInterval);
+      peerServerPingInterval = setInterval(() => {
+        if (peer && peer.socket && peer.socket.isConnected()) {
+          peer.socket.send({ type: 'HEARTBEAT' });
         }
+      }, 15000);
+    }
+
+    function attemptReconnect() {
+      if (isReconnecting) return;
+      isReconnecting = true;
+
+      console.log('Attempting WebRTC P2P Reconnection...');
+      showToast('Connection interrupted. Reconnecting...', 'warning');
+
+      if (!isHost && currentRoomId) {
+        connectDataChannel(currentRoomId);
+      } else if (peer && !peer.destroyed) {
+        peer.reconnect();
       }
     }
 
-    // HANDLE INCOMING MESSAGES & DATA
+    function manualReconnect() {
+      showToast('Initiating manual reconnection...', 'info');
+      if (isHost) {
+        if (peer && !peer.destroyed) peer.reconnect();
+      } else {
+        if (currentRoomId) connectDataChannel(currentRoomId);
+      }
+    }
+
+    // INCOMING DATA ROUTER
     function handleIncomingData(data) {
       if (!data || !data.type) return;
 
+      // Update Heartbeat time on any incoming packet
+      lastPongTime = Date.now();
+
       switch (data.type) {
+        case 'ping':
+          if (activeConn && activeConn.open) activeConn.send({ type: 'pong' });
+          break;
+
+        case 'pong':
+          // Heartbeat pong received successfully
+          break;
+
         case 'text':
           appendTextMessage({
             id: data.id,
@@ -579,8 +812,7 @@
             timestamp: data.timestamp
           });
           playNotificationSound();
-          // Send ACK back
-          if (activeConn) activeConn.send({ type: 'ack', id: data.id });
+          if (activeConn && activeConn.open) activeConn.send({ type: 'ack', id: data.id });
           break;
 
         case 'file':
@@ -595,7 +827,7 @@
             timestamp: data.timestamp
           });
           playNotificationSound();
-          if (activeConn) activeConn.send({ type: 'ack', id: data.id });
+          if (activeConn && activeConn.open) activeConn.send({ type: 'ack', id: data.id });
           break;
 
         case 'typing':
@@ -605,10 +837,198 @@
         case 'ack':
           markMessageDelivered(data.id);
           break;
+
+        case 'call-declined':
+          showToast('Peer declined the voice call.', 'warning');
+          endVoiceCall(false);
+          break;
+
+        case 'call-ended':
+          showToast('Peer ended the voice call.', 'info');
+          endVoiceCall(false);
+          break;
       }
     }
 
-    // SEND TEXT MESSAGE
+    // VOICE CALL IMPLEMENTATION
+    async function initiateVoiceCall() {
+      if (!activeConn || !activeConn.open) {
+        showToast('Peer is not connected yet.', 'warning');
+        return;
+      }
+
+      showToast('Initiating audio call...', 'info');
+
+      try {
+        localAudioStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+        
+        const targetPeerId = activeConn.peer;
+        mediaCall = peer.call(targetPeerId, localAudioStream);
+
+        setupMediaCall(mediaCall);
+        showVoiceCallBar('Calling peer...');
+      } catch (err) {
+        console.error('Microphone access error:', err);
+        showToast('Microphone access denied or not found.', 'error');
+      }
+    }
+
+    async function acceptIncomingCall() {
+      document.getElementById('incoming-call-modal').classList.add('hidden');
+      if (!pendingIncomingCall) return;
+
+      try {
+        localAudioStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+        mediaCall = pendingIncomingCall;
+        pendingIncomingCall = null;
+
+        mediaCall.answer(localAudioStream);
+        setupMediaCall(mediaCall);
+        showVoiceCallBar('Call Active');
+      } catch (err) {
+        console.error('Microphone error:', err);
+        showToast('Microphone permission required to join call.', 'error');
+        declineIncomingCall();
+      }
+    }
+
+    function declineIncomingCall() {
+      document.getElementById('incoming-call-modal').classList.add('hidden');
+      if (pendingIncomingCall) {
+        pendingIncomingCall.close();
+        pendingIncomingCall = null;
+      }
+      if (activeConn && activeConn.open) {
+        activeConn.send({ type: 'call-declined' });
+      }
+    }
+
+    function setupMediaCall(call) {
+      call.on('stream', (remoteStream) => {
+        const audioEl = document.getElementById('remote-audio');
+        audioEl.srcObject = remoteStream;
+        audioEl.play().catch(e => console.log('Autoplay audio allowed:', e));
+
+        startCallTimer();
+        startAudioVisualizer(remoteStream);
+        document.getElementById('call-status-subtitle').textContent = 'Connected (128kbps Opus Direct)';
+      });
+
+      call.on('close', () => {
+        endVoiceCall(false);
+      });
+
+      call.on('error', (err) => {
+        console.error('Voice Call Error:', err);
+        showToast('Voice call error', 'error');
+        endVoiceCall(false);
+      });
+    }
+
+    function toggleMuteMic() {
+      if (!localAudioStream) return;
+      isMicMuted = !isMicMuted;
+      
+      localAudioStream.getAudioTracks().forEach(track => {
+        track.enabled = !isMicMuted;
+      });
+
+      const btn = document.getElementById('mute-mic-btn');
+      const icon = document.getElementById('mute-mic-icon');
+      const text = document.getElementById('mute-mic-text');
+
+      if (isMicMuted) {
+        btn.className = 'px-3 py-1.5 bg-rose-600 hover:bg-rose-500 text-white border border-rose-500 rounded-lg text-xs font-semibold flex items-center space-x-1.5 transition-colors';
+        icon.className = 'fa-solid fa-microphone-slash';
+        text.textContent = 'Muted';
+      } else {
+        btn.className = 'px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-lg text-xs font-semibold flex items-center space-x-1.5 transition-colors';
+        icon.className = 'fa-solid fa-microphone';
+        text.textContent = 'Mute';
+      }
+    }
+
+    function endVoiceCall(notifyPeer = true) {
+      if (notifyPeer && activeConn && activeConn.open) {
+        activeConn.send({ type: 'call-ended' });
+      }
+
+      if (mediaCall) {
+        mediaCall.close();
+        mediaCall = null;
+      }
+
+      if (localAudioStream) {
+        localAudioStream.getTracks().forEach(track => track.stop());
+        localAudioStream = null;
+      }
+
+      stopCallTimer();
+      stopAudioVisualizer();
+
+      document.getElementById('voice-call-bar').classList.add('hidden');
+      document.getElementById('remote-audio').srcObject = null;
+      isMicMuted = false;
+      
+      showToast('Voice call ended.', 'info');
+    }
+
+    function showVoiceCallBar(title) {
+      document.getElementById('voice-call-bar').classList.remove('hidden');
+      document.getElementById('call-status-subtitle').textContent = title;
+    }
+
+    function startCallTimer() {
+      stopCallTimer();
+      callStartTime = Date.now();
+      const timerEl = document.getElementById('call-timer');
+      
+      callTimerInterval = setInterval(() => {
+        const elapsedSecs = Math.floor((Date.now() - callStartTime) / 1000);
+        const mins = String(Math.floor(elapsedSecs / 60)).padStart(2, '0');
+        const secs = String(elapsedSecs % 60).padStart(2, '0');
+        timerEl.textContent = `${mins}:${secs}`;
+      }, 1000);
+    }
+
+    function stopCallTimer() {
+      if (callTimerInterval) clearInterval(callTimerInterval);
+      document.getElementById('call-timer').textContent = '00:00';
+    }
+
+    function startAudioVisualizer(stream) {
+      try {
+        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        const source = audioContext.createMediaStreamSource(stream);
+        analyserNode = audioContext.createAnalyser();
+        analyserNode.fftSize = 32;
+        source.connect(analyserNode);
+
+        const container = document.getElementById('audio-vis-container');
+        container.classList.remove('hidden');
+        const bars = container.querySelectorAll('.vis-bar');
+        const dataArray = new Uint8Array(analyserNode.frequencyBinCount);
+
+        function render() {
+          analyserNode.getByteFrequencyData(dataArray);
+          bars.forEach((bar, idx) => {
+            const val = dataArray[idx * 2] || 0;
+            const heightPx = Math.max(4, Math.min(20, (val / 255) * 20));
+            bar.style.height = `${heightPx}px`;
+          });
+          visualizerAnimFrame = requestAnimationFrame(render);
+        }
+        render();
+      } catch (e) {}
+    }
+
+    function stopAudioVisualizer() {
+      if (visualizerAnimFrame) cancelAnimationFrame(visualizerAnimFrame);
+      if (audioContext) audioContext.close();
+      document.getElementById('audio-vis-container').classList.add('hidden');
+    }
+
+    // CHAT & FILE MESSAGING IMPLEMENTATION
     function handleSendText(e) {
       if (e) e.preventDefault();
       const text = chatInput.value.trim();
@@ -622,17 +1042,13 @@
       const msgId = 'msg-' + Date.now();
       const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-      // Send via WebRTC Data Channel
-      const payload = {
+      activeConn.send({
         type: 'text',
         id: msgId,
         text: text,
         timestamp: timestamp
-      };
+      });
 
-      activeConn.send(payload);
-
-      // Render local message
       appendTextMessage({
         id: msgId,
         sender: 'you',
@@ -640,13 +1056,11 @@
         timestamp: timestamp
       });
 
-      // Clear Input
       chatInput.value = '';
       chatInput.style.height = 'auto';
       sendTypingSignal(false);
     }
 
-    // APPEND TEXT MESSAGE BUBBLE
     function appendTextMessage({ id, sender, text, timestamp }) {
       if (waitingPlaceholder) waitingPlaceholder.classList.add('hidden');
 
@@ -677,67 +1091,107 @@
       scrollToBottom();
     }
 
-    // SEND FILE / IMAGE
+    // FILE ATTACHMENT CONFIRMATION WORKFLOW
     function handleFileSelect(e) {
       const file = e.target.files[0];
-      if (file) processAndSendFile(file);
-      e.target.value = ''; // Reset input
+      if (file) stageFileForConfirmation(file);
+      e.target.value = '';
     }
 
-    function processAndSendFile(file) {
+    function stageFileForConfirmation(file) {
       if (!activeConn || activeConn.open === false) {
         showToast('Cannot send file: Peer not connected.', 'warning');
         return;
       }
 
-      // Max size soft limit suggestion (e.g. 50MB for browser memory safety)
-      if (file.size > 50 * 1024 * 1024) {
-        if (!confirm('File is over 50MB. Large files may slow down browser memory. Proceed?')) {
-          return;
-        }
+      stagedFile = file;
+      stagedFileDataUrl = null;
+
+      const isImage = file.type.startsWith('image/');
+      const modal = document.getElementById('file-confirm-modal');
+      const previewImg = document.getElementById('confirm-file-preview-img');
+      const iconContainer = document.getElementById('confirm-file-icon-container');
+      const iconEl = document.getElementById('confirm-file-icon');
+      
+      document.getElementById('confirm-file-name').textContent = file.name;
+      document.getElementById('confirm-file-size').textContent = formatFileSize(file.size);
+
+      if (isImage) {
+        const reader = new FileReader();
+        reader.onload = (evt) => {
+          stagedFileDataUrl = evt.target.result;
+          previewImg.src = stagedFileDataUrl;
+          previewImg.classList.remove('hidden');
+          iconContainer.classList.add('hidden');
+        };
+        reader.readAsDataURL(file);
+      } else {
+        previewImg.src = '';
+        previewImg.classList.add('hidden');
+        iconEl.className = getIconForFileType(file.type, file.name) + ' text-3xl';
+        iconContainer.classList.remove('hidden');
       }
 
-      showToast(`Preparing ${file.name}...`, 'info');
-
-      const reader = new FileReader();
-      reader.onload = function (evt) {
-        const dataUrl = evt.target.result;
-        const msgId = 'file-' + Date.now();
-        const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        const isImage = file.type.startsWith('image/');
-        const formattedSize = formatFileSize(file.size);
-
-        const payload = {
-          type: 'file',
-          id: msgId,
-          name: file.name,
-          fileType: file.type,
-          size: formattedSize,
-          isImage: isImage,
-          dataUrl: dataUrl,
-          timestamp: timestamp
-        };
-
-        // Send over WebRTC Data Connection
-        activeConn.send(payload);
-
-        // Render Local Message Bubble
-        appendFileMessage({
-          id: msgId,
-          sender: 'you',
-          name: file.name,
-          fileType: file.type,
-          size: formattedSize,
-          isImage: isImage,
-          dataUrl: dataUrl,
-          timestamp: timestamp
-        });
-      };
-
-      reader.readAsDataURL(file);
+      modal.classList.remove('hidden');
     }
 
-    // APPEND FILE OR IMAGE MESSAGE
+    function cancelStagedFile() {
+      stagedFile = null;
+      stagedFileDataUrl = null;
+      document.getElementById('file-confirm-modal').classList.add('hidden');
+    }
+
+    function sendStagedFile() {
+      if (!stagedFile) return;
+
+      const file = stagedFile;
+      const isImage = file.type.startsWith('image/');
+
+      if (isImage && stagedFileDataUrl) {
+        executeFileSend(file, stagedFileDataUrl);
+        cancelStagedFile();
+      } else {
+        showToast(`Preparing ${file.name}...`, 'info');
+        const reader = new FileReader();
+        reader.onload = (evt) => {
+          executeFileSend(file, evt.target.result);
+          cancelStagedFile();
+        };
+        reader.readAsDataURL(file);
+      }
+    }
+
+    function executeFileSend(file, dataUrl) {
+      const msgId = 'file-' + Date.now();
+      const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      const isImage = file.type.startsWith('image/');
+      const formattedSize = formatFileSize(file.size);
+
+      activeConn.send({
+        type: 'file',
+        id: msgId,
+        name: file.name,
+        fileType: file.type,
+        size: formattedSize,
+        isImage: isImage,
+        dataUrl: dataUrl,
+        timestamp: timestamp
+      });
+
+      appendFileMessage({
+        id: msgId,
+        sender: 'you',
+        name: file.name,
+        fileType: file.type,
+        size: formattedSize,
+        isImage: isImage,
+        dataUrl: dataUrl,
+        timestamp: timestamp
+      });
+
+      showToast(`Sent ${file.name}`, 'success');
+    }
+
     function appendFileMessage({ id, sender, name, fileType, size, isImage, dataUrl, timestamp }) {
       if (waitingPlaceholder) waitingPlaceholder.classList.add('hidden');
 
@@ -752,7 +1206,6 @@
         : 'bg-slate-800 text-slate-100 rounded-2xl rounded-tl-xs p-3 max-w-[85%] sm:max-w-md border border-slate-700/80 shadow-md text-sm';
 
       if (isImage) {
-        // IMAGE DISPLAY
         bubble.innerHTML = `
           <div class="space-y-2">
             <div class="relative group rounded-lg overflow-hidden bg-slate-950/40 border border-black/10 cursor-pointer" onclick="openImageModal('${dataUrl}', '${escapeHtml(name)}')">
@@ -772,7 +1225,6 @@
           </div>
         `;
       } else {
-        // NON-IMAGE FILE DISPLAY
         const fileIcon = getIconForFileType(fileType, name);
         bubble.innerHTML = `
           <div class="flex items-center space-x-3">
@@ -805,7 +1257,6 @@
       scrollToBottom();
     }
 
-    // SYSTEM MESSAGE (Centered status updates)
     function appendSystemMessage(text) {
       if (waitingPlaceholder) waitingPlaceholder.classList.add('hidden');
       const pill = document.createElement('div');
@@ -819,27 +1270,22 @@
       scrollToBottom();
     }
 
-    // MARK MESSAGE DELIVERED (ACK)
     function markMessageDelivered(msgId) {
       const el = document.getElementById(`status-${msgId}`);
       if (el) {
-        el.innerHTML = `<i class="fa-solid fa-check-double text-indigo-400" title="Delivered to peer"></i>`;
+        el.innerHTML = `<i class="fa-solid fa-check-double text-indigo-400" title="Delivered"></i>`;
       }
     }
 
-    // TYPING INDICATOR LOGIC
+    // TYPING INDICATOR
     function handleInputChange(el) {
-      // Auto expand height
       el.style.height = 'auto';
       el.style.height = Math.min(el.scrollHeight, 128) + 'px';
 
-      // Typing notification throttling
       if (activeConn && activeConn.open) {
         sendTypingSignal(true);
         clearTimeout(typingTimer);
-        typingTimer = setTimeout(() => {
-          sendTypingSignal(false);
-        }, 2000);
+        typingTimer = setTimeout(() => sendTypingSignal(false), 2000);
       }
     }
 
@@ -866,7 +1312,7 @@
       }
     }
 
-    // DRAG AND DROP ZONE
+    // DRAG AND DROP SETUP
     function setupDragAndDrop() {
       const dropZone = document.body;
 
@@ -892,19 +1338,53 @@
         const dt = e.dataTransfer;
         const files = dt.files;
         if (files && files.length > 0) {
-          processAndSendFile(files[0]);
+          stageFileForConfirmation(files[0]);
         }
       });
     }
 
-    // MODAL UTILITIES
+    // UI & MODAL UTILITIES
+    function switchToChatView() {
+      lobbyView.classList.add('hidden');
+      chatView.classList.remove('hidden');
+      chatRoomIdDisplay.textContent = currentRoomId;
+      leaveBtn.classList.remove('hidden');
+      headerShareBtn.classList.remove('hidden');
+    }
+
+    function confirmLeaveRoom() {
+      if (confirm('Are you sure you want to leave this room?')) {
+        if (mediaCall) endVoiceCall(false);
+        stopHeartbeat();
+        
+        if (activeConn) activeConn.close();
+        if (peer) peer.destroy();
+        
+        window.location.hash = '';
+        activeConn = null;
+        peer = null;
+        currentRoomId = null;
+
+        chatView.classList.add('hidden');
+        lobbyView.classList.remove('hidden');
+        headerShareBtn.classList.add('hidden');
+        voiceCallBtn.classList.add('hidden');
+        leaveBtn.classList.add('hidden');
+        setConnectionStatus('disconnected');
+        messagesContainer.innerHTML = '';
+        if (waitingPlaceholder) {
+          messagesContainer.appendChild(waitingPlaceholder);
+          waitingPlaceholder.classList.remove('hidden');
+        }
+      }
+    }
+
     function openShareModal() {
       if (!currentRoomId) return;
 
       const shareUrl = `${window.location.origin}${window.location.pathname}#${currentRoomId}`;
       document.getElementById('share-url-input').value = shareUrl;
 
-      // Render QR Code using QRCode.js
       const qrContainer = document.getElementById('qrcode');
       qrContainer.innerHTML = '';
       new QRCode(qrContainer, {
@@ -936,12 +1416,10 @@
       document.getElementById('image-modal').classList.add('hidden');
     }
 
-    // COPY SHARE LINK TO CLIPBOARD
     function copyRoomLink() {
       const input = document.getElementById('share-url-input');
       const shareUrl = input.value || `${window.location.origin}${window.location.pathname}#${currentRoomId}`;
       
-      // Fallback copy logic for iframe restrictions
       const tempInput = document.createElement('input');
       tempInput.value = shareUrl;
       document.body.appendChild(tempInput);
@@ -950,12 +1428,11 @@
         document.execCommand('copy');
         showToast('Share link copied to clipboard!', 'success');
       } catch (err) {
-        showToast('Failed to copy automatically.', 'error');
+        showToast('Failed to copy link automatically.', 'error');
       }
       document.body.removeChild(tempInput);
     }
 
-    // TOAST NOTIFICATIONS
     function showToast(message, type = 'info') {
       const container = document.getElementById('toast-container');
       const toast = document.createElement('div');
@@ -979,19 +1456,16 @@
 
       container.appendChild(toast);
 
-      // Animate in
       requestAnimationFrame(() => {
         toast.classList.remove('translate-y-2', 'opacity-0');
       });
 
-      // Dismiss after 3 seconds
       setTimeout(() => {
         toast.classList.add('opacity-0', 'translate-y-2');
         setTimeout(() => toast.remove(), 300);
       }, 3000);
     }
 
-    // HELPER UTILITIES
     function scrollToBottom() {
       messagesContainer.scrollTop = messagesContainer.scrollHeight;
     }
